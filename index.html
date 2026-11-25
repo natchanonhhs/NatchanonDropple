@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dropple — ระบบส่งไฟล์และข้อความแบบ P2P</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'IBM Plex Sans Thai', sans-serif; }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .toast-enter { animation: slideUp 0.2s ease-out forwards; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col">
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-xs w-full pointer-events-none"></div>
+
+  <!-- แจ้งเตือนหากเปิดซ้ำหลายแท็บ -->
+  <div id="duplicateTabOverlay" class="fixed inset-0 bg-slate-900/90 z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-sm w-full p-6 text-center shadow-xl border border-slate-200">
+      <h2 class="text-lg font-semibold text-slate-900">เปิดใช้งานอยู่ในหน้าต่างอื่นแล้ว</h2>
+      <p class="text-sm text-slate-600 mt-2">ระบบอนุญาตให้เปิดใช้งานได้ทีละ 1 แท็บต่อเบราว์เซอร์ เพื่อไม่ให้รายชื่อเครื่องซ้ำซ้อน</p>
+      <button onclick="takeOverTab()" class="mt-5 w-full bg-slate-900 text-white text-sm font-medium py-2.5 rounded-lg hover:bg-slate-800 transition">
+        สลับมาใช้หน้านี้แทน
+      </button>
+    </div>
+  </div>
+
+  <!-- หน้าต่างยืนยันการรับการเชื่อมต่อ (ฝั่งรับ) -->
+  <div id="incomingRequestModal" class="fixed inset-0 bg-slate-900/60 z-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl border border-slate-200">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium uppercase tracking-wider text-slate-500">คำขอเชื่อมต่อ</span>
+        <span id="requestCountdown" class="text-xs font-semibold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full">30 วินาที</span>
+      </div>
+      <h3 id="requesterName" class="text-lg font-semibold text-slate-900 mt-3">ไม่ทราบชื่อเครื่อง</h3>
+      <p class="text-sm text-slate-600 mt-1">ต้องการเชื่อมต่อเพื่อส่งไฟล์หรือข้อความมายังเครื่องนี้</p>
+
+      <label class="flex items-center gap-2.5 mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer">
+        <input type="checkbox" id="rememberDeviceCheck" class="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900">
+        <span class="text-sm text-slate-700">จำเครื่องนี้ (ครั้งหน้าเชื่อมต่ออัตโนมัติ)</span>
+      </label>
+
+      <div class="grid grid-cols-2 gap-3 mt-5">
+        <button onclick="respondConnection(false)" class="py-2.5 px-4 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+          ปฏิเสธ
+        </button>
+        <button onclick="respondConnection(true)" class="py-2.5 px-4 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition">
+          อนุญาต
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- หน้าต่างจัดการเครื่องที่จำไว้ -->
+  <div id="settingsModal" class="fixed inset-0 bg-slate-900/60 z-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-semibold text-slate-900">ตั้งค่าอุปกรณ์</h3>
+        <button onclick="toggleSettings(false)" class="text-slate-400 hover:text-slate-700 text-sm font-medium">ปิด</button>
+      </div>
+
+      <div class="mt-4">
+        <label class="block text-xs font-medium text-slate-500 mb-1.5">ชื่อเครื่องของคุณ</label>
+        <div class="flex gap-2">
+          <input type="text" id="deviceNameInput" class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-900" />
+          <button onclick="saveDeviceName()" class="bg-slate-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-slate-800 transition">บันทึก</button>
+        </div>
+      </div>
+
+      <div class="mt-5">
+        <label class="block text-xs font-medium text-slate-500 mb-2">เครื่องที่จำไว้</label>
+        <div id="trustedList" class="space-y-2 max-h-40 overflow-y-auto text-sm text-slate-600"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200">
+    <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <!-- Minimalist Logo without Text -->
+        <div class="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base font-semibold tracking-tight text-slate-900">Dropple</h1>
+          <div class="flex items-center gap-1.5 text-xs text-slate-500">
+            <span id="statusDot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+            <span id="statusText">กำลังเชื่อมต่อเครือข่าย...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="headerDeviceName" class="hidden sm:inline text-xs font-medium bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg"></span>
+        <button onclick="toggleSettings(true)" class="text-xs font-medium border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg transition">
+          ตั้งค่า
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-4xl w-full mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+
+    <!-- ฝั่งซ้าย: ข้อมูลเครื่องนี้ & การจับคู่ -->
+    <section class="md:col-span-5 space-y-5">
+      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-slate-900">รหัสรับไฟล์ของเครื่องนี้</h2>
+          <div class="flex items-center gap-3">
+            <button onclick="copyShareLink()" class="text-xs text-slate-500 hover:text-slate-900 underline">คัดลอกลิงก์</button>
+            <button onclick="regenerateCode()" class="text-xs text-slate-500 hover:text-slate-900 underline">เปลี่ยนรหัส</button>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-col items-center bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <div id="qrcode" class="bg-white p-2.5 rounded-lg border border-slate-100"></div>
+          <div id="myPairingCode" class="mt-3 text-2xl font-semibold tracking-[0.25em] text-slate-900">------</div>
+          <p class="text-xs text-slate-500 mt-1 text-center">สแกน QR หรือกรอกรหัส 6 หลักบนอีกเครื่อง</p>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-slate-100">
+          <label class="block text-xs font-medium text-slate-600 mb-1.5">เชื่อมต่อด้วยรหัส 6 หลัก</label>
+          <div class="flex gap-2">
+            <input type="text" id="targetCodeInput" maxlength="6" inputmode="numeric" placeholder="000000"
+              onkeydown="if(event.key==='Enter') connectByCode()"
+              class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-center tracking-widest font-medium focus:outline-none focus:border-slate-900" />
+            <button onclick="connectByCode()" class="bg-slate-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-slate-800 whitespace-nowrap transition">
+              เชื่อมต่อ
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-slate-900">เครื่องใน Wi-Fi เดียวกัน</h2>
+          <span id="wifiBadge" class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded">กำลังค้นหา</span>
+        </div>
+        <div id="nearbyDevicesList" class="space-y-2">
+          <p class="text-xs text-slate-400 py-3 text-center">ไม่พบเครื่องอื่นในเครือข่ายเดียวกัน</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ฝั่งขวา: พื้นที่ส่งและรับไฟล์/ข้อความ -->
+    <section class="md:col-span-7 space-y-5">
+      <div id="activeSessionBox" class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div id="noConnectionState" class="text-center py-8">
+          <p class="text-sm font-medium text-slate-700">ยังไม่ได้เชื่อมต่อกับเครื่องปลายทาง</p>
+          <p class="text-xs text-slate-500 mt-1">เลือกเครื่องในรายการด้านซ้าย หรือกรอกรหัส 6 หลักเพื่อเริ่มส่งข้อมูล</p>
+        </div>
+
+        <div id="connectedState" class="hidden space-y-4">
+          <div class="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+            <div>
+              <span class="text-xs text-emerald-700 font-medium">เชื่อมต่อแล้ว (P2P เข้ารหัสตรง)</span>
+              <h3 id="connectedPeerName" class="text-sm font-semibold text-emerald-950">ชื่อเครื่องปลายทาง</h3>
+            </div>
+            <button onclick="disconnectPeer()" class="text-xs font-medium text-emerald-800 hover:underline">ตัดการเชื่อมต่อ</button>
+          </div>
+
+          <div id="dropZone" onclick="document.getElementById('fileInput').click()"
+            class="border-2 border-dashed border-slate-300 hover:border-slate-900 rounded-xl p-6 text-center cursor-pointer transition bg-slate-50/50">
+            <input type="file" id="fileInput" multiple class="hidden" onchange="handleFiles(this.files)" />
+            <p class="text-sm font-medium text-slate-800">แตะเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่</p>
+            <p class="text-xs text-slate-500 mt-1">รองรับทุกนามสกุล ไม่จำกัดขนาด และรองรับการวางรูปจากคลิปบอร์ด (Ctrl+V)</p>
+          </div>
+
+          <div class="flex gap-2">
+            <input type="text" id="textMessageInput" placeholder="พิมพ์ข้อความหรือวางลิงก์เพื่อส่ง..."
+              onkeydown="if(event.key==='Enter') sendTextMessage()"
+              class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-900" />
+            <button onclick="sendTextMessage()" class="bg-slate-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-slate-800 transition whitespace-nowrap">
+              ส่งข้อความ
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-slate-900">รายการไฟล์และข้อความ</h2>
+          <button onclick="clearTransferLog()" class="text-xs text-slate-400 hover:text-slate-700">ล้างรายการ</button>
+        </div>
+        <div id="transferList" class="space-y-2.5 max-h-[380px] overflow-y-auto">
+          <p id="emptyTransferMsg" class="text-xs text-slate-400 py-6 text-center">ยังไม่มีรายการรับหรือส่ง</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="text-center text-xs text-slate-400 py-4 border-t border-slate-200 bg-white">
+    ข้อมูลถูกส่งตรงระหว่างอุปกรณ์ผ่าน WebRTC ไม่มีการจัดเก็บบนเซิร์ฟเวอร์
+  </footer>
+
+  <script>
+    // ==========================================
+    // 1. ตั้งค่า FIREBASE CONFIG (dropplenatchanon)
+    // ==========================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyCNCAzdmKg59CLCn9DSe2HfbKWJWPmMNI8",
+      authDomain: "dropplenatchanon.firebaseapp.com",
+      databaseURL: "https://dropplenatchanon-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "dropplenatchanon",
+      storageBucket: "dropplenatchanon.firebasestorage.app",
+      messagingSenderId: "607628618342",
+      appId: "1:607628618342:web:00d33e2bbceed3ab609ba7",
+      measurementId: "G-0TBN79HGXK"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // ==========================================
+    // 2. ตัวแปรระบบและข้อมูลอุปกรณ์
+    // ==========================================
+    const CHUNK_SIZE = 16384; // 16KB ปลอดภัยทั้ง iOS Safari และ Chrome
+    let peer = null;
+    let myPeerId = null;
+    let myCode = null;
+    let wifiRoomKey = null;
+    let activeConn = null;
+    let pendingIncomingConn = null;
+    let pendingRequesterInfo = null;
+    let countdownTimer = null;
+
+    const incomingFiles = {};
+
+    const myToken = localStorage.getItem('ld_token') || crypto.randomUUID();
+    localStorage.setItem('ld_token', myToken);
+
+    let myDeviceName = localStorage.getItem('ld_device_name') || detectDeviceName();
+    localStorage.setItem('ld_device_name', myDeviceName);
+
+    function detectDeviceName() {
+      const ua = navigator.userAgent;
+      let os = 'Desktop';
+      if (/iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) os = 'iPad';
+      else if (/iPhone/.test(ua)) os = 'iPhone';
+      else if (/Android/.test(ua)) os = 'Android';
+      else if (/Mac/.test(ua)) os = 'Mac';
+      else if (/Windows/.test(ua)) os = 'Windows';
+
+      let browser = 'Browser';
+      if (/Edg/.test(ua)) browser = 'Edge';
+      else if (/Chrome/.test(ua) && !/Edg/.test(ua)) browser = 'Chrome';
+      else if (/Safari/.test(ua) && !/Chrome/.test(ua)) browser = 'Safari';
+      else if (/Firefox/.test(ua)) browser = 'Firefox';
+
+      return `${os} ${browser}`;
+    }
+
+    // Custom Toast Notification (แทนที่ alert แบบเดิม)
+    function showToast(message, isError = false) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast-enter pointer-events-auto px-4 py-3 rounded-xl shadow-lg border text-xs font-medium ${
+        isError
+          ? 'bg-rose-950 text-rose-50 border-rose-800'
+          : 'bg-slate-900 text-white border-slate-800'
+      }`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.2s ease';
+        setTimeout(() => toast.remove(), 200);
+      }, 3200);
+    }
+
+    // ==========================================
+    // 3. ป้องกันการเปิดหลายแท็บพร้อมกัน
+    // ==========================================
+    const tabChannel = new BroadcastChannel('dropple_natchanon_tab_guard');
+    tabChannel.postMessage({ type: 'ping' });
+    tabChannel.onmessage = (e) => {
+      if (e.data.type === 'ping') {
+        tabChannel.postMessage({ type: 'pong' });
+      } else if (e.data.type === 'pong') {
+        document.getElementById('duplicateTabOverlay').classList.remove('hidden');
+        document.getElementById('duplicateTabOverlay').classList.add('flex');
+      } else if (e.data.type === 'takeover') {
+        document.getElementById('duplicateTabOverlay').classList.remove('hidden');
+        document.getElementById('duplicateTabOverlay').classList.add('flex');
+      }
+    };
+
+    function takeOverTab() {
+      tabChannel.postMessage({ type: 'takeover' });
+      document.getElementById('duplicateTabOverlay').classList.add('hidden');
+      document.getElementById('duplicateTabOverlay').classList.remove('flex');
+    }
+
+    // ==========================================
+    // 4. เริ่มต้นระบบ PeerJS และ Firebase Signaling
+    // ==========================================
+    async function initApp() {
+      updateDeviceNameUI();
+      renderTrustedList();
+
+      peer = new Peer({
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        }
+      });
+
+      peer.on('open', async (id) => {
+        myPeerId = id;
+        setConnectionStatus(true);
+        await registerPairingCode();
+        await joinWifiRoom();
+        checkUrlCodeParam();
+      });
+
+      peer.on('connection', (conn) => {
+        setupIncomingConnection(conn);
+      });
+
+      peer.on('disconnected', () => {
+        setConnectionStatus(false);
+        peer.reconnect();
+      });
+
+      peer.on('error', (err) => {
+        console.error('PeerJS Error:', err);
+        showToast('การเชื่อมต่อขัดข้อง: ' + err.type, true);
+      });
+    }
+
+    function setConnectionStatus(online) {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      if (online) {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+        text.textContent = 'พร้อมใช้งาน';
+      } else {
+        dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+        text.textContent = 'กำลังเชื่อมต่อใหม่...';
+      }
+    }
+
+    async function registerPairingCode() {
+      if (myCode) {
+        await db.ref(`codes/${myCode}`).remove();
+      }
+      myCode = Math.floor(100000 + Math.random() * 900000).toString();
+      document.getElementById('myPairingCode').textContent = myCode;
+
+      const codeRef = db.ref(`codes/${myCode}`);
+      await codeRef.set({
+        peerId: myPeerId,
+        deviceName: myDeviceName,
+        timestamp: firebase.database.ServerValue.TIMESTAMP
+      });
+      codeRef.onDisconnect().remove();
+
+      const qrContainer = document.getElementById('qrcode');
+      qrContainer.innerHTML = '';
+      const shareUrl = `${window.location.origin}${window.location.pathname}?code=${myCode}`;
+      new QRCode(qrContainer, {
+        text: shareUrl,
+        width: 128,
+        height: 128,
+        colorDark: '#0f172a',
+        colorLight: '#ffffff'
+      });
+    }
+
+    function regenerateCode() {
+      if (myPeerId) {
+        registerPairingCode();
+        showToast('เปลี่ยนรหัสรับไฟล์ใหม่แล้ว');
+      }
+    }
+
+    function copyShareLink() {
+      if (!myCode) return;
+      const shareUrl = `${window.location.origin}${window.location.pathname}?code=${myCode}`;
+      navigator.clipboard.writeText(shareUrl);
+      showToast('คัดลอกลิงก์เชื่อมต่อแล้ว');
+    }
+
+    async function joinWifiRoom() {
+      try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        const data = await res.json();
+        wifiRoomKey = data.ip.replace(/[.:]/g, '_');
+
+        const myRoomRef = db.ref(`wifi_rooms/${wifiRoomKey}/${myPeerId}`);
+        await myRoomRef.set({
+          peerId: myPeerId,
+          deviceName: myDeviceName
+        });
+        myRoomRef.onDisconnect().remove();
+
+        document.getElementById('wifiBadge').textContent = 'ออนไลน์';
+
+        db.ref(`wifi_rooms/${wifiRoomKey}`).on('value', (snapshot) => {
+          const devices = snapshot.val() || {};
+          renderNearbyDevices(devices);
+        });
+      } catch (e) {
+        document.getElementById('wifiBadge').textContent = 'ใช้รหัส 6 หลัก';
+      }
+    }
+
+    function renderNearbyDevices(devices) {
+      const container = document.getElementById('nearbyDevicesList');
+      const entries = Object.values(devices).filter(d => d.peerId !== myPeerId);
+
+      if (entries.length === 0) {
+        container.innerHTML = '<p class="text-xs text-slate-400 py-3 text-center">ไม่พบเครื่องอื่นในเครือข่ายเดียวกัน</p>';
+        return;
+      }
+
+      container.innerHTML = entries.map(device => `
+        <button onclick="initiateConnection('${device.peerId}', '${escapeHtml(device.deviceName)}')"
+          class="w-full flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:border-slate-900 hover:bg-slate-50 transition text-left">
+          <div>
+            <div class="text-sm font-medium text-slate-900">${escapeHtml(device.deviceName)}</div>
+            <div class="text-[11px] text-slate-500">แตะเพื่อเชื่อมต่อ</div>
+          </div>
+          <span class="text-xs font-medium text-slate-700 bg-slate-100 px-2.5 py-1 rounded">เลือก</span>
+        </button>
+      `).join('');
+    }
+
+    // ==========================================
+    // 5. การจับคู่และยืนยันสิทธิ์ (Handshake)
+    // ==========================================
+    async function connectByCode() {
+      const code = document.getElementById('targetCodeInput').value.trim();
+      if (code.length !== 6) {
+        showToast('กรุณากรอกรหัส 6 หลักให้ครบถ้วน', true);
+        return;
+      }
+      if (code === myCode) {
+        showToast('ไม่สามารถเชื่อมต่อกับเครื่องตัวเองได้', true);
+        return;
+      }
+
+      try {
+        const snap = await db.ref(`codes/${code}`).once('value');
+        const target = snap.val();
+        if (!target) {
+          showToast('ไม่พบรหัสนี้ หรือเครื่องปลายทางปิดหน้าเว็บไปแล้ว', true);
+          return;
+        }
+        initiateConnection(target.peerId, target.deviceName);
+      } catch (err) {
+        showToast('ไม่สามารถอ่านข้อมูลจากฐานข้อมูลได้ กรุณาตรวจสอบ Firebase Rules', true);
+      }
+    }
+
+    function checkUrlCodeParam() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (code && code.length === 6) {
+        document.getElementById('targetCodeInput').value = code;
+        window.history.replaceState({}, document.title, window.location.pathname);
+        connectByCode();
+      }
+    }
+
+    function initiateConnection(targetPeerId, targetName) {
+      if (activeConn) activeConn.close();
+      showToast(`กำลังส่งคำขอไปยัง ${targetName}...`);
+
+      const conn = peer.connect(targetPeerId, { reliable: true });
+      conn.on('open', () => {
+        conn.send({
+          type: 'handshake-hello',
+          deviceName: myDeviceName,
+          token: myToken
+        });
+      });
+
+      conn.on('data', (data) => {
+        if (data.type === 'handshake-accepted') {
+          activateSession(conn, data.deviceName || targetName);
+          showToast(`เชื่อมต่อกับ ${data.deviceName || targetName} สำเร็จ`);
+        } else if (data.type === 'handshake-rejected') {
+          showToast('เครื่องปลายทางปฏิเสธการเชื่อมต่อ', true);
+          conn.close();
+        } else {
+          handleIncomingPayload(data);
+        }
+      });
+
+      conn.on('close', () => resetSessionUI());
+    }
+
+    function setupIncomingConnection(conn) {
+      conn.on('data', (data) => {
+        if (data.type === 'handshake-hello') {
+          const trusted = getTrustedDevices();
+          if (trusted[data.token]) {
+            conn.send({ type: 'handshake-accepted', deviceName: myDeviceName });
+            activateSession(conn, data.deviceName);
+            showToast(`เชื่อมต่ออัตโนมัติกับ ${data.deviceName}`);
+          } else {
+            pendingIncomingConn = conn;
+            pendingRequesterInfo = { token: data.token, name: data.deviceName };
+            showRequestModal(data.deviceName);
+          }
+        } else {
+          handleIncomingPayload(data);
+        }
+      });
+
+      conn.on('close', () => resetSessionUI());
+    }
+
+    function showRequestModal(name) {
+      document.getElementById('requesterName').textContent = name;
+      document.getElementById('rememberDeviceCheck').checked = false;
+      const modal = document.getElementById('incomingRequestModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+
+      let sec = 30;
+      document.getElementById('requestCountdown').textContent = `${sec} วินาที`;
+      clearInterval(countdownTimer);
+      countdownTimer = setInterval(() => {
+        sec--;
+        document.getElementById('requestCountdown').textContent = `${sec} วินาที`;
+        if (sec <= 0) {
+          respondConnection(false);
+        }
+      }, 1000);
+    }
+
+    function respondConnection(accepted) {
+      clearInterval(countdownTimer);
+      const modal = document.getElementById('incomingRequestModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+
+      if (!pendingIncomingConn) return;
+
+      if (accepted) {
+        if (document.getElementById('rememberDeviceCheck').checked && pendingRequesterInfo) {
+          saveTrustedDevice(pendingRequesterInfo.token, pendingRequesterInfo.name);
+        }
+        pendingIncomingConn.send({ type: 'handshake-accepted', deviceName: myDeviceName });
+        activateSession(pendingIncomingConn, pendingRequesterInfo.name);
+      } else {
+        pendingIncomingConn.send({ type: 'handshake-rejected' });
+        pendingIncomingConn.close();
+      }
+      pendingIncomingConn = null;
+    }
+
+    function activateSession(conn, peerName) {
+      activeConn = conn;
+      document.getElementById('noConnectionState').classList.add('hidden');
+      document.getElementById('connectedState').classList.remove('hidden');
+      document.getElementById('connectedPeerName').textContent = peerName;
+    }
+
+    function disconnectPeer() {
+      if (activeConn) activeConn.close();
+      resetSessionUI();
+      showToast('ตัดการเชื่อมต่อแล้ว');
+    }
+
+    function resetSessionUI() {
+      activeConn = null;
+      document.getElementById('noConnectionState').classList.remove('hidden');
+      document.getElementById('connectedState').classList.add('hidden');
+    }
+
+    // ==========================================
+    // 6. การส่งและรับไฟล์ (Stream Chunking) + ข้อความ
+    // ==========================================
+    function sendTextMessage() {
+      const input = document.getElementById('textMessageInput');
+      const text = input.value.trim();
+      if (!text || !activeConn) return;
+
+      activeConn.send({ type: 'text-message', text });
+      appendTextLog(text, 'ส่งแล้ว');
+      input.value = '';
+    }
+
+    async function handleFiles(fileList) {
+      if (!activeConn || fileList.length === 0) return;
+
+      for (const file of fileList) {
+        const fileId = crypto.randomUUID();
+        const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+
+        const progressEl = appendFileLog(fileId, file.name, file.size, 'กำลังส่ง 0%');
+
+        activeConn.send({
+          type: 'file-start',
+          fileId,
+          name: file.name,
+          size: file.size,
+          mime: file.type || 'application/octet-stream',
+          totalChunks
+        });
+
+        // อ่านไฟล์ทีละ 16KB ด้วย slice() เพื่อไม่ให้กินแรมเครื่องมือถือ
+        for (let i = 0; i < totalChunks; i++) {
+          while (activeConn && activeConn.dataChannel && activeConn.dataChannel.bufferedAmount > CHUNK_SIZE * 16) {
+            await new Promise(r => setTimeout(r, 15));
+          }
+          if (!activeConn) return;
+
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const chunk = await file.slice(start, end).arrayBuffer();
+
+          activeConn.send({
+            type: 'file-chunk',
+            fileId,
+            index: i,
+            chunk
+          });
+
+          if (i % 10 === 0 || i === totalChunks - 1) {
+            const pct = Math.round(((i + 1) / totalChunks) * 100);
+            progressEl.textContent = `กำลังส่ง ${pct}%`;
+          }
+        }
+
+        activeConn.send({ type: 'file-end', fileId });
+        progressEl.textContent = 'ส่งสำเร็จ';
+        progressEl.className = 'text-xs font-medium text-emerald-600 whitespace-nowrap';
+      }
+
+      document.getElementById('fileInput').value = '';
+    }
+
+    function handleIncomingPayload(data) {
+      if (data.type === 'text-message') {
+        appendTextLog(data.text, 'ได้รับข้อความ');
+        showToast('ได้รับข้อความใหม่');
+      } else if (data.type === 'file-start') {
+        const progressEl = appendFileLog(data.fileId, data.name, data.size, 'กำลังรับ 0%');
+        incomingFiles[data.fileId] = {
+          meta: data,
+          chunks: new Array(data.totalChunks),
+          receivedCount: 0,
+          progressEl
+        };
+      } else if (data.type === 'file-chunk') {
+        const record = incomingFiles[data.fileId];
+        if (!record) return;
+        record.chunks[data.index] = data.chunk;
+        record.receivedCount++;
+        if (record.receivedCount % 10 === 0 || record.receivedCount === record.meta.totalChunks) {
+          const pct = Math.round((record.receivedCount / record.meta.totalChunks) * 100);
+          record.progressEl.textContent = `กำลังรับ ${pct}%`;
+        }
+      } else if (data.type === 'file-end') {
+        const record = incomingFiles[data.fileId];
+        if (!record) return;
+        const blob = new Blob(record.chunks, { type: record.meta.mime });
+        const downloadUrl = URL.createObjectURL(blob);
+
+        record.progressEl.outerHTML = `
+          <a href="${downloadUrl}" download="${escapeHtml(record.meta.name)}"
+            class="text-xs font-medium bg-slate-900 text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition whitespace-nowrap">
+            ดาวน์โหลด
+          </a>
+        `;
+        showToast(`ได้รับไฟล์ ${record.meta.name}`);
+        delete incomingFiles[data.fileId];
+      }
+    }
+
+    // รองรับการวางรูปภาพหรือไฟล์จากคลิปบอร์ด (Ctrl+V / Cmd+V)
+    window.addEventListener('paste', (e) => {
+      if (!activeConn) return;
+      if (document.activeElement === document.getElementById('textMessageInput')) return;
+
+      const items = e.clipboardData?.files;
+      if (items && items.length > 0) {
+        handleFiles(items);
+        showToast('กำลังส่งไฟล์จากคลิปบอร์ด...');
+      }
+    });
+
+    // ==========================================
+    // 7. การจัดการ UI รายการและตั้งค่า
+    // ==========================================
+    function appendFileLog(id, name, size, statusText) {
+      document.getElementById('emptyTransferMsg')?.remove();
+      const list = document.getElementById('transferList');
+      const item = document.createElement('div');
+      item.className = 'flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50';
+      item.innerHTML = `
+        <div class="min-w-0 pr-3">
+          <div class="text-sm font-medium text-slate-900 truncate">${escapeHtml(name)}</div>
+          <div class="text-xs text-slate-500">${formatBytes(size)}</div>
+        </div>
+        <span id="status_${id}" class="text-xs font-medium text-slate-600 whitespace-nowrap">${statusText}</span>
+      `;
+      list.prepend(item);
+      return document.getElementById(`status_${id}`);
+    }
+
+    function appendTextLog(text, direction) {
+      document.getElementById('emptyTransferMsg')?.remove();
+      const list = document.getElementById('transferList');
+      const item = document.createElement('div');
+      item.className = 'p-3 rounded-lg border border-slate-200 bg-slate-50 flex items-start justify-between gap-3';
+      item.innerHTML = `
+        <div class="min-w-0 flex-1">
+          <div class="text-[11px] text-slate-400 mb-0.5">${direction}</div>
+          <div class="text-sm text-slate-900 break-words">${escapeHtml(text)}</div>
+        </div>
+        <button onclick="navigator.clipboard.writeText(this.dataset.text); this.textContent='คัดลอกแล้ว'"
+          data-text="${escapeHtml(text)}"
+          class="text-xs font-medium border border-slate-300 bg-white px-2.5 py-1 rounded hover:bg-slate-100 whitespace-nowrap">
+          คัดลอก
+        </button>
+      `;
+      list.prepend(item);
+    }
+
+    function clearTransferLog() {
+      document.getElementById('transferList').innerHTML =
+        '<p id="emptyTransferMsg" class="text-xs text-slate-400 py-6 text-center">ยังไม่มีรายการรับหรือส่ง</p>';
+    }
+
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('border-slate-900', 'bg-slate-100');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('border-slate-900', 'bg-slate-100');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-slate-900', 'bg-slate-100');
+      handleFiles(e.dataTransfer.files);
+    });
+
+    function toggleSettings(show) {
+      const modal = document.getElementById('settingsModal');
+      if (show) {
+        document.getElementById('deviceNameInput').value = myDeviceName;
+        renderTrustedList();
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      } else {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    function saveDeviceName() {
+      const val = document.getElementById('deviceNameInput').value.trim();
+      if (!val) return;
+      myDeviceName = val;
+      localStorage.setItem('ld_device_name', myDeviceName);
+      updateDeviceNameUI();
+      if (myPeerId && wifiRoomKey) {
+        db.ref(`wifi_rooms/${wifiRoomKey}/${myPeerId}/deviceName`).set(myDeviceName);
+      }
+      if (myCode) {
+        db.ref(`codes/${myCode}/deviceName`).set(myDeviceName);
+      }
+      toggleSettings(false);
+      showToast('บันทึกชื่อเครื่องแล้ว');
+    }
+
+    function updateDeviceNameUI() {
+      document.getElementById('headerDeviceName').textContent = myDeviceName;
+    }
+
+    function getTrustedDevices() {
+      return JSON.parse(localStorage.getItem('ld_trusted') || '{}');
+    }
+
+    function saveTrustedDevice(token, name) {
+      const trusted = getTrustedDevices();
+      trusted[token] = name;
+      localStorage.setItem('ld_trusted', JSON.stringify(trusted));
+    }
+
+    function removeTrustedDevice(token) {
+      const trusted = getTrustedDevices();
+      delete trusted[token];
+      localStorage.setItem('ld_trusted', JSON.stringify(trusted));
+      renderTrustedList();
+    }
+
+    function renderTrustedList() {
+      const trusted = getTrustedDevices();
+      const entries = Object.entries(trusted);
+      const el = document.getElementById('trustedList');
+      if (entries.length === 0) {
+        el.innerHTML = '<p class="text-xs text-slate-400">ยังไม่มีเครื่องที่บันทึกไว้</p>';
+        return;
+      }
+      el.innerHTML = entries.map(([token, name]) => `
+        <div class="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
+          <span class="text-xs font-medium text-slate-800">${escapeHtml(name)}</span>
+          <button onclick="removeTrustedDevice('${token}')" class="text-xs text-rose-600 hover:underline">ลบออก</button>
+        </div>
+      `).join('');
+    }
+
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    window.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>
