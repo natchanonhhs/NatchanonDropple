@@ -2,215 +2,681 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dropple — ระบบส่งไฟล์และข้อความแบบ P2P</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Dropple — ส่งไฟล์และข้อความตรงระหว่างเครื่อง</title>
+  <link rel="icon" type="image/png" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
+  <link rel="shortcut icon" type="image/png" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
+  <link rel="apple-touch-icon" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    // ตั้งค่าธีมล่วงหน้าก่อนเรนเดอร์เพื่อไม่ให้หน้าจอกระพริบ
+    (function() {
+      const savedTheme = localStorage.getItem('dp_theme') || 'system';
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const isDark = savedTheme === 'dark' || (savedTheme === 'system' && prefersDark);
+      if (isDark) document.documentElement.classList.add('dark');
+    })();
+  </script>
   <style>
-    body { font-family: 'IBM Plex Sans Thai', sans-serif; }
-    @keyframes slideUp {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: translateY(0); }
+    :root {
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-sub: #f1f5f9;
+      --bg-btn-sec: #f1f5f9;
+      --bg-btn-sec-hover: #e2e8f0;
+      --border-main: #e2e8f0;
+      --border-sub: #cbd5e1;
+      --text-primary: #0f172a;
+      --text-secondary: #334155;
+      --text-muted: #64748b;
+      --teal-pill-bg: #ccfbf1;
+      --teal-pill-text: #0f766e;
+      --teal-pill-border: #99f6e4;
+      --teal-btn-bg: #0d9488;
+      --teal-btn-hover: #0f766e;
+      --teal-btn-text: #ffffff;
+      --teal-btn-border: #0d9488;
+      --accent-text: #0d9488;
+      --switch-off: #cbd5e1;
+      --switch-on: #0d9488;
+      --toast-bg: rgba(15, 23, 42, 0.95);
+      --toast-text: #f8fafc;
+      --toast-border: #334155;
+      --dropzone-border: #99f6e4;
+      --dropzone-hover-bg: rgba(204, 251, 241, 0.35);
     }
-    .toast-enter { animation: slideUp 0.2s ease-out forwards; }
+
+    html.dark {
+      --bg-page: #0b0e11;
+      --bg-card: #13171c;
+      --bg-sub: #0e1115;
+      --bg-btn-sec: #1a2027;
+      --bg-btn-sec-hover: #222933;
+      --border-main: #1f252d;
+      --border-sub: #28303b;
+      --text-primary: #f1f5f9;
+      --text-secondary: #cbd5e1;
+      --text-muted: #64748b;
+      --teal-pill-bg: #12292d;
+      --teal-pill-text: #2dd4bf;
+      --teal-pill-border: #1d444b;
+      --teal-btn-bg: #164e56;
+      --teal-btn-hover: #1b5e68;
+      --teal-btn-text: #5eead4;
+      --teal-btn-border: #226973;
+      --accent-text: #2dd4bf;
+      --switch-off: #262e38;
+      --switch-on: #14b8a6;
+      --toast-bg: rgba(24, 32, 40, 0.95);
+      --toast-text: #f1f5f9;
+      --toast-border: #283442;
+      --dropzone-border: #243b42;
+      --dropzone-hover-bg: rgba(19, 42, 46, 0.4);
+    }
+
+    body {
+      font-family: 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-primary);
+      -webkit-tap-highlight-color: transparent;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    .card-surface {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-main);
+    }
+    .sub-surface {
+      background-color: var(--bg-sub);
+      border: 1px solid var(--border-main);
+    }
+    .btn-secondary {
+      background-color: var(--bg-btn-sec);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-sub);
+    }
+    .btn-secondary:hover {
+      background-color: var(--bg-btn-sec-hover);
+    }
+    .text-main { color: var(--text-primary); }
+    .text-sec { color: var(--text-secondary); }
+    .text-dim { color: var(--text-muted); }
+    .text-accent { color: var(--accent-text); }
+    .border-main { border-color: var(--border-main); }
+
+    .teal-pill-active {
+      background-color: var(--teal-pill-bg);
+      color: var(--teal-pill-text);
+      border: 1px solid var(--teal-pill-border);
+    }
+    .teal-btn {
+      background-color: var(--teal-btn-bg);
+      color: var(--teal-btn-text);
+      border: 1px solid var(--teal-btn-border);
+    }
+    .teal-btn:hover:not(:disabled) {
+      background-color: var(--teal-btn-hover);
+    }
+    .teal-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .code-box:focus {
+      border-color: #14b8a6;
+      box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.2);
+      outline: none;
+    }
+    .dropzone-area {
+      border-color: var(--dropzone-border);
+    }
+    .dropzone-area:hover, .dropzone-area.drag-active {
+      border-color: #14b8a6;
+      background-color: var(--dropzone-hover-bg);
+    }
+    .logo-container {
+      background-color: var(--bg-sub);
+      border: 1px solid var(--border-main);
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.35); border-radius: 999px; }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col">
+<body class="min-h-screen flex flex-col justify-between selection:bg-teal-500/30 selection:text-teal-600 dark:selection:text-teal-200">
 
-  <!-- Toast Notification Container -->
-  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-xs w-full pointer-events-none"></div>
+  <!-- Toast แจ้งเตือนมุมขวาล่าง -->
+  <div id="toastContainer" class="fixed bottom-16 right-4 z-50 flex flex-col gap-2 max-w-xs w-full pointer-events-none"></div>
 
-  <!-- แจ้งเตือนหากเปิดซ้ำหลายแท็บ -->
-  <div id="duplicateTabOverlay" class="fixed inset-0 bg-slate-900/90 z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-xl max-w-sm w-full p-6 text-center shadow-xl border border-slate-200">
-      <h2 class="text-lg font-semibold text-slate-900">เปิดใช้งานอยู่ในหน้าต่างอื่นแล้ว</h2>
-      <p class="text-sm text-slate-600 mt-2">ระบบอนุญาตให้เปิดใช้งานได้ทีละ 1 แท็บต่อเบราว์เซอร์ เพื่อไม่ให้รายชื่อเครื่องซ้ำซ้อน</p>
-      <button onclick="takeOverTab()" class="mt-5 w-full bg-slate-900 text-white text-sm font-medium py-2.5 rounded-lg hover:bg-slate-800 transition">
-        สลับมาใช้หน้านี้แทน
+  <!-- แจ้งเตือนเปิดซ้ำหลายแท็บ -->
+  <div id="duplicateTabOverlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="card-surface rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
+      <div class="w-12 h-12 rounded-xl logo-container p-2 flex items-center justify-center mx-auto mb-4">
+        <img class="brand-logo-img w-full h-full object-contain" src="https://i.postimg.cc/VvBWWhJq/N.png" alt="Dropple" />
+      </div>
+      <h2 class="text-base font-semibold text-main">Dropple เปิดอยู่ในอีกหน้า</h2>
+      <p class="text-xs text-dim mt-1.5 leading-relaxed">ใช้ได้ทีละหน้าต่อเบราว์เซอร์ เครื่องอื่นจะได้เห็นเครื่องนี้เป็นเครื่องเดียว</p>
+      <button onclick="takeOverTab()" class="mt-5 w-full teal-btn text-sm font-medium py-2.5 rounded-xl transition">
+        ใช้หน้านี้แทน
       </button>
     </div>
   </div>
 
-  <!-- หน้าต่างยืนยันการรับการเชื่อมต่อ (ฝั่งรับ) -->
-  <div id="incomingRequestModal" class="fixed inset-0 bg-slate-900/60 z-40 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl border border-slate-200">
+  <!-- หน้าต่างยืนยันการรับการเชื่อมต่อ (กรณีทักผ่าน Wi-Fi โดยไม่ใช้รหัส) -->
+  <div id="incomingRequestModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
+    <div class="card-surface rounded-2xl max-w-sm w-full p-6 shadow-2xl">
       <div class="flex items-center justify-between">
-        <span class="text-xs font-medium uppercase tracking-wider text-slate-500">คำขอเชื่อมต่อ</span>
-        <span id="requestCountdown" class="text-xs font-semibold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full">30 วินาที</span>
+        <span class="text-xs font-medium text-dim">คำขอเชื่อมต่อ</span>
+        <span id="requestCountdown" class="text-xs font-semibold teal-pill-active px-2.5 py-0.5 rounded-full">30</span>
       </div>
-      <h3 id="requesterName" class="text-lg font-semibold text-slate-900 mt-3">ไม่ทราบชื่อเครื่อง</h3>
-      <p class="text-sm text-slate-600 mt-1">ต้องการเชื่อมต่อเพื่อส่งไฟล์หรือข้อความมายังเครื่องนี้</p>
+      <h3 id="requesterName" class="text-lg font-semibold text-main mt-3">ไม่ทราบชื่อเครื่อง</h3>
+      <p class="text-xs text-dim mt-1">อยากส่งไฟล์หรือข้อความมาที่เครื่องนี้ · ถ้าไม่ตอบ จะปฏิเสธให้อัตโนมัติ</p>
 
-      <label class="flex items-center gap-2.5 mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer">
-        <input type="checkbox" id="rememberDeviceCheck" class="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900">
-        <span class="text-sm text-slate-700">จำเครื่องนี้ (ครั้งหน้าเชื่อมต่ออัตโนมัติ)</span>
+      <label class="flex items-center gap-2.5 mt-4 p-3 sub-surface rounded-xl cursor-pointer">
+        <input type="checkbox" id="rememberDeviceCheck" class="w-4 h-4 rounded border-slate-400 text-teal-600 focus:ring-teal-500">
+        <span class="text-xs text-sec">จำเครื่องนี้ ครั้งหน้าไม่ต้องถาม</span>
       </label>
 
       <div class="grid grid-cols-2 gap-3 mt-5">
-        <button onclick="respondConnection(false)" class="py-2.5 px-4 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
-          ปฏิเสธ
+        <button onclick="respondConnection(false)" class="py-2.5 px-4 rounded-xl text-xs font-medium btn-secondary transition">
+          ไม่รับ
         </button>
-        <button onclick="respondConnection(true)" class="py-2.5 px-4 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition">
-          อนุญาต
+        <button onclick="respondConnection(true)" class="py-2.5 px-4 rounded-xl text-xs font-medium teal-btn transition">
+          รับ
         </button>
       </div>
     </div>
   </div>
 
-  <!-- หน้าต่างจัดการเครื่องที่จำไว้ -->
-  <div id="settingsModal" class="fixed inset-0 bg-slate-900/60 z-40 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-        <h3 class="text-base font-semibold text-slate-900">ตั้งค่าอุปกรณ์</h3>
-        <button onclick="toggleSettings(false)" class="text-slate-400 hover:text-slate-700 text-sm font-medium">ปิด</button>
+  <!-- หน้าต่างแสดง QR Code (เมื่อกด "แสดง QR" ตอนเชื่อมต่ออยู่) -->
+  <div id="qrModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
+    <div class="card-surface rounded-2xl max-w-xs w-full p-6 text-center shadow-2xl relative">
+      <button onclick="toggleQrModal(false)" class="absolute top-4 right-4 text-dim hover:text-main p-1">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      <h3 class="text-sm font-semibold text-main">สแกนจากมือถือ</h3>
+      <div class="mt-4 inline-block bg-white p-3 rounded-xl border border-slate-200">
+        <div id="modalQrcode"></div>
+      </div>
+      <div id="modalPairingCode" class="mt-3 text-2xl font-bold tracking-[0.28em] text-main pl-1">------</div>
+      <p class="text-[11px] text-dim mt-2">สแกนด้วยกล้องมือถือ หรือใส่รหัสด้านบน</p>
+    </div>
+  </div>
+
+  <!-- หน้าต่างวิธีใช้ (ปุ่ม ?) -->
+  <div id="helpModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
+    <div class="card-surface rounded-2xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-main">
+        <h3 class="text-base font-semibold text-main">วิธีใช้ Dropple</h3>
+        <button onclick="toggleHelpModal(false)" class="text-dim hover:text-main p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <ol class="mt-4 space-y-3 text-xs text-sec leading-relaxed list-decimal list-inside">
+        <li>เปิดหน้าเว็บนี้บนทั้งสองเครื่องที่ต้องการส่งข้อมูลหากัน</li>
+        <li>สแกน QR Code หรือนำรหัส 6 หลักของเครื่องรับไปกรอกในแท็บ <strong class="text-accent">ส่งไฟล์</strong> ของอีกเครื่อง</li>
+        <li>เลือกไฟล์ รูปภาพ วิดีโอ หรือพิมพ์ข้อความเพื่อส่งตรงระหว่างเครื่องโดยไม่ผ่านเซิร์ฟเวอร์</li>
+        <li>กด <strong class="text-accent">จำไว้</strong> เพื่อให้ครั้งหน้าเห็นชื่อเครื่องและเชื่อมต่อได้ทันทีโดยไม่ต้องใส่รหัสใหม่</li>
+      </ol>
+      <button onclick="toggleHelpModal(false)" class="mt-5 w-full teal-btn text-xs font-medium py-2.5 rounded-xl transition">
+        เริ่มใช้งาน
+      </button>
+    </div>
+  </div>
+
+  <!-- หน้าต่างตั้งค่า (Settings Modal) -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
+    <div class="card-surface rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3">
+        <h3 class="text-base font-semibold text-main">ตั้งค่า</h3>
+        <button onclick="toggleSettings(false)" class="text-accent hover:opacity-80 p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
 
-      <div class="mt-4">
-        <label class="block text-xs font-medium text-slate-500 mb-1.5">ชื่อเครื่องของคุณ</label>
-        <div class="flex gap-2">
-          <input type="text" id="deviceNameInput" class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-900" />
-          <button onclick="saveDeviceName()" class="bg-slate-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-slate-800 transition">บันทึก</button>
+      <!-- ธีมการแสดงผล -->
+      <div class="mt-2">
+        <label class="block text-xs font-medium text-sec mb-2">ธีมหน้าเว็บ</label>
+        <div class="grid grid-cols-3 gap-2 sub-surface p-1 rounded-xl">
+          <button type="button" id="themeOptSystem" onclick="setThemePreference('system')"
+            class="py-2 px-3 rounded-lg text-xs font-medium transition text-center">
+            เริ่มต้น
+          </button>
+          <button type="button" id="themeOptLight" onclick="setThemePreference('light')"
+            class="py-2 px-3 rounded-lg text-xs font-medium transition text-center">
+            สีขาว
+          </button>
+          <button type="button" id="themeOptDark" onclick="setThemePreference('dark')"
+            class="py-2 px-3 rounded-lg text-xs font-medium transition text-center">
+            สีดำ
+          </button>
         </div>
       </div>
 
+      <!-- ชื่อเครื่องนี้ -->
       <div class="mt-5">
-        <label class="block text-xs font-medium text-slate-500 mb-2">เครื่องที่จำไว้</label>
-        <div id="trustedList" class="space-y-2 max-h-40 overflow-y-auto text-sm text-slate-600"></div>
+        <label class="block text-xs font-medium text-sec mb-2">ชื่อเครื่องนี้</label>
+        <input type="text" id="deviceNameInput" onchange="saveDeviceName()" onblur="saveDeviceName()"
+          class="w-full sub-surface rounded-xl px-3.5 py-2.5 text-sm text-main focus:border-teal-500 focus:outline-none" />
+        <p class="text-[11px] text-dim mt-1.5">เครื่องอื่นใน Wi-Fi เดียวกันจะเห็นชื่อนี้</p>
+      </div>
+
+      <!-- เครื่องที่จำไว้ -->
+      <div class="mt-5">
+        <label class="block text-xs font-medium text-sec mb-1.5">เครื่องที่จำไว้</label>
+        <div id="trustedList" class="space-y-2 text-xs text-dim"></div>
+      </div>
+
+      <!-- บันทึกไฟล์ที่ -->
+      <div class="mt-5">
+        <label class="block text-xs font-medium text-sec mb-2">บันทึกไฟล์ที่</label>
+        <button onclick="pickSaveDirectory()" class="w-full sub-surface hover:border-teal-500 rounded-xl px-3.5 py-2.5 flex items-center gap-2.5 text-left transition">
+          <svg class="w-4 h-4 text-accent shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+          </svg>
+          <span id="saveFolderLabel" class="text-xs text-main truncate">ดาวน์โหลดของเบราว์เซอร์</span>
+        </button>
+        <p class="text-[11px] text-dim mt-1.5">เครื่องนี้จะเก็บไฟล์ไว้ในดาวน์โหลดของเบราว์เซอร์</p>
+      </div>
+
+      <!-- สวิตช์ตั้งค่า 3 รายการ -->
+      <div class="mt-5 pt-4 border-t border-main space-y-4">
+        <!-- 1. เปิดดูไฟล์ทันทีที่ได้รับ -->
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <div class="text-xs font-medium text-main">เปิดดูไฟล์ทันทีที่ได้รับ</div>
+            <div class="text-[11px] text-dim">รูป วิดีโอ เพลง และ PDF · ต้องเปิดหน้านี้ไว้</div>
+          </div>
+          <button type="button" id="toggleAutoPreview" onclick="toggleSettingSwitch('autoPreview')"
+            class="w-11 h-6 rounded-full transition-colors relative shrink-0">
+            <span class="dot block w-5 h-5 rounded-full bg-white shadow transform transition-transform translate-x-0.5"></span>
+          </button>
+        </div>
+
+        <!-- 2. คัดลอกข้อความที่ได้รับทันที -->
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <div class="text-xs font-medium text-main">คัดลอกข้อความที่ได้รับทันที</div>
+            <div class="text-[11px] text-dim">ถ้าแท็บนี้อยู่เบื้องหลัง จะคัดลอกตอนกลับมาที่แท็บ</div>
+          </div>
+          <button type="button" id="toggleAutoCopy" onclick="toggleSettingSwitch('autoCopyText')"
+            class="w-11 h-6 rounded-full transition-colors relative shrink-0">
+            <span class="dot block w-5 h-5 rounded-full bg-white shadow transform transition-transform translate-x-5"></span>
+          </button>
+        </div>
+
+        <!-- 3. เสียงแจ้งเตือน -->
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <div class="text-xs font-medium text-main">เสียงแจ้งเตือน</div>
+            <div class="text-[11px] text-dim">เล่นเสียงเมื่อได้รับไฟล์หรือข้อความ</div>
+          </div>
+          <button type="button" id="toggleSoundAlert" onclick="toggleSettingSwitch('soundAlert')"
+            class="w-11 h-6 rounded-full transition-colors relative shrink-0">
+            <span class="dot block w-5 h-5 rounded-full bg-white shadow transform transition-transform translate-x-5"></span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Header -->
-  <header class="bg-white border-b border-slate-200">
-    <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <!-- Minimalist Logo without Text -->
-        <div class="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
-          <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+  <!-- หน้าต่างแสดงตัวอย่างไฟล์เต็มจอ (Preview Modal) -->
+  <div id="previewModal" class="fixed inset-0 bg-black/95 z-50 hidden flex-col">
+    <div class="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-[#1f252d] bg-[#0b0e11]">
+      <span id="previewFileName" class="text-sm font-medium text-white truncate pr-4">filename.png</span>
+      <div class="flex items-center gap-2 shrink-0">
+        <a id="previewDownloadBtn" href="#" download=""
+          class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-[#1a2027] text-slate-200 hover:bg-[#242c36] border border-[#2c3540] transition">
+          บันทึก
+        </a>
+        <button onclick="closePreviewModal()"
+          class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-[#1a2027] text-slate-200 hover:bg-[#242c36] border border-[#2c3540] transition">
+          ปิด
+        </button>
+      </div>
+    </div>
+    <div id="previewBody" class="flex-1 flex items-center justify-center p-4 overflow-auto"></div>
+  </div>
+
+  <!-- แถบแจ้งเตือนด้านล่างสำหรับกด "จำเครื่องนี้ไว้ไหม" -->
+  <div id="rememberBar" class="fixed bottom-11 left-1/2 -translate-x-1/2 z-30 hidden max-w-xl w-[calc(100%-2rem)]">
+    <div class="card-surface rounded-2xl px-4 py-2.5 shadow-2xl flex items-center justify-between gap-3">
+      <p class="text-xs text-sec truncate">
+        จำ <span id="rememberBarName" class="font-semibold text-main">Device</span> ไว้ไหม · ครั้งหน้าเห็นชื่อในรายการ ไม่ต้องใส่รหัส
+      </p>
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="confirmRememberCurrentPeer()" class="teal-btn font-semibold text-xs px-3.5 py-1.5 rounded-full transition">
+          จำไว้
+        </button>
+        <button onclick="dismissRememberBar()" class="text-dim hover:text-main p-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Wrapper -->
+  <div class="w-full max-w-5xl mx-auto px-4 pt-4 pb-16 flex-1 flex flex-col">
+
+    <!-- Header Bar -->
+    <header class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <!-- โลโก้เปลี่ยนตามธีมสีขาว / สีดำ -->
+        <div class="w-10 h-10 rounded-xl logo-container p-1.5 flex items-center justify-center shrink-0 overflow-hidden">
+          <img class="brand-logo-img w-full h-full object-contain" src="https://i.postimg.cc/VvBWWhJq/N.png" alt="Dropple" />
         </div>
         <div>
-          <h1 class="text-base font-semibold tracking-tight text-slate-900">Dropple</h1>
-          <div class="flex items-center gap-1.5 text-xs text-slate-500">
-            <span id="statusDot" class="w-2 h-2 rounded-full bg-amber-400"></span>
-            <span id="statusText">กำลังเชื่อมต่อเครือข่าย...</span>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base font-semibold text-main tracking-tight">Dropple</h1>
+            <span id="statusDot" class="w-2 h-2 rounded-full bg-amber-400" title="สถานะเครือข่าย"></span>
           </div>
+          <p id="headerSubtitle" class="text-[11px] text-dim">กำลังเชื่อมต่อ...</p>
         </div>
       </div>
 
       <div class="flex items-center gap-2">
-        <span id="headerDeviceName" class="hidden sm:inline text-xs font-medium bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg"></span>
-        <button onclick="toggleSettings(true)" class="text-xs font-medium border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg transition">
-          ตั้งค่า
+        <!-- ปุ่มสลับธีมด่วน (ตามระบบ -> ขาว -> ดำ) -->
+        <button onclick="cycleTheme()" id="quickThemeBtn" title="เปลี่ยนธีม (ตามระบบ / ขาว / ดำ)"
+          class="h-9 px-3 rounded-full card-surface hover:border-teal-500 flex items-center gap-1.5 text-dim hover:text-main transition">
+          <svg id="themeIconSun" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="4" />
+            <path stroke-linecap="round" d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41" />
+          </svg>
+          <svg id="themeIconMoon" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+          </svg>
+          <svg id="themeIconSystem" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <path stroke-linecap="round" d="M8 21h8m-4-4v4" />
+          </svg>
+          <span id="quickThemeLabel" class="text-[11px] font-medium hidden sm:inline">ตามระบบ</span>
+        </button>
+
+        <button onclick="toggleHelpModal(true)" title="วิธีใช้"
+          class="w-9 h-9 rounded-full card-surface hover:border-teal-500 flex items-center justify-center text-dim hover:text-main transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01" />
+          </svg>
+        </button>
+
+        <button onclick="toggleSettings(true)" title="ตั้งค่า"
+          class="w-9 h-9 rounded-full card-surface hover:border-teal-500 flex items-center justify-center text-dim hover:text-main transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Segmented Tab Control (รับไฟล์ / ส่งไฟล์) -->
+    <div class="mb-5">
+      <div class="card-surface p-1 rounded-2xl grid grid-cols-2 md:inline-grid md:w-80">
+        <button id="tabReceiveBtn" onclick="switchTab('receive')"
+          class="teal-pill-active py-2 px-4 rounded-xl text-xs font-medium flex items-center justify-center gap-2 transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          <span>รับไฟล์</span>
+        </button>
+        <button id="tabSendBtn" onclick="switchTab('send')"
+          class="py-2 px-4 rounded-xl text-xs font-medium text-dim hover:text-main flex items-center justify-center gap-2 transition border border-transparent">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+          <span>ส่งไฟล์</span>
         </button>
       </div>
     </div>
-  </header>
 
-  <!-- Main Content -->
-  <main class="flex-1 max-w-4xl w-full mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+    <!-- ========================================== -->
+    <!-- VIEW 1: แท็บ "รับไฟล์" -->
+    <!-- ========================================== -->
+    <div id="receiveView" class="grid grid-cols-1 md:grid-cols-12 gap-5 flex-1 items-start">
 
-    <!-- ฝั่งซ้าย: ข้อมูลเครื่องนี้ & การจับคู่ -->
-    <section class="md:col-span-5 space-y-5">
-      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <div class="flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-900">รหัสรับไฟล์ของเครื่องนี้</h2>
+      <!-- การ์ดซ้าย: รายการที่ได้รับ -->
+      <div class="md:col-span-7 card-surface rounded-2xl p-5 min-h-[380px] flex flex-col">
+        <div class="flex items-start justify-between gap-3">
           <div class="flex items-center gap-3">
-            <button onclick="copyShareLink()" class="text-xs text-slate-500 hover:text-slate-900 underline">คัดลอกลิงก์</button>
-            <button onclick="regenerateCode()" class="text-xs text-slate-500 hover:text-slate-900 underline">เปลี่ยนรหัส</button>
-          </div>
-        </div>
-
-        <div class="mt-4 flex flex-col items-center bg-slate-50 border border-slate-200 rounded-xl p-4">
-          <div id="qrcode" class="bg-white p-2.5 rounded-lg border border-slate-100"></div>
-          <div id="myPairingCode" class="mt-3 text-2xl font-semibold tracking-[0.25em] text-slate-900">------</div>
-          <p class="text-xs text-slate-500 mt-1 text-center">สแกน QR หรือกรอกรหัส 6 หลักบนอีกเครื่อง</p>
-        </div>
-
-        <div class="mt-4 pt-4 border-t border-slate-100">
-          <label class="block text-xs font-medium text-slate-600 mb-1.5">เชื่อมต่อด้วยรหัส 6 หลัก</label>
-          <div class="flex gap-2">
-            <input type="text" id="targetCodeInput" maxlength="6" inputmode="numeric" placeholder="000000"
-              onkeydown="if(event.key==='Enter') connectByCode()"
-              class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-center tracking-widest font-medium focus:outline-none focus:border-slate-900" />
-            <button onclick="connectByCode()" class="bg-slate-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-slate-800 whitespace-nowrap transition">
-              เชื่อมต่อ
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-sm font-semibold text-slate-900">เครื่องใน Wi-Fi เดียวกัน</h2>
-          <span id="wifiBadge" class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded">กำลังค้นหา</span>
-        </div>
-        <div id="nearbyDevicesList" class="space-y-2">
-          <p class="text-xs text-slate-400 py-3 text-center">ไม่พบเครื่องอื่นในเครือข่ายเดียวกัน</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ฝั่งขวา: พื้นที่ส่งและรับไฟล์/ข้อความ -->
-    <section class="md:col-span-7 space-y-5">
-      <div id="activeSessionBox" class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <div id="noConnectionState" class="text-center py-8">
-          <p class="text-sm font-medium text-slate-700">ยังไม่ได้เชื่อมต่อกับเครื่องปลายทาง</p>
-          <p class="text-xs text-slate-500 mt-1">เลือกเครื่องในรายการด้านซ้าย หรือกรอกรหัส 6 หลักเพื่อเริ่มส่งข้อมูล</p>
-        </div>
-
-        <div id="connectedState" class="hidden space-y-4">
-          <div class="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
-            <div>
-              <span class="text-xs text-emerald-700 font-medium">เชื่อมต่อแล้ว (P2P เข้ารหัสตรง)</span>
-              <h3 id="connectedPeerName" class="text-sm font-semibold text-emerald-950">ชื่อเครื่องปลายทาง</h3>
+            <div class="w-10 h-10 rounded-xl logo-container p-1.5 flex items-center justify-center shrink-0 overflow-hidden">
+              <img class="brand-logo-img w-full h-full object-contain" src="https://i.postimg.cc/VvBWWhJq/N.png" alt="Dropple" />
             </div>
-            <button onclick="disconnectPeer()" class="text-xs font-medium text-emerald-800 hover:underline">ตัดการเชื่อมต่อ</button>
+            <div>
+              <h2 class="text-sm font-semibold text-main">รอรับไฟล์อยู่นะ</h2>
+              <p class="text-xs text-dim">เปิดหน้านี้ค้างไว้ได้เลย</p>
+            </div>
           </div>
 
-          <div id="dropZone" onclick="document.getElementById('fileInput').click()"
-            class="border-2 border-dashed border-slate-300 hover:border-slate-900 rounded-xl p-6 text-center cursor-pointer transition bg-slate-50/50">
-            <input type="file" id="fileInput" multiple class="hidden" onchange="handleFiles(this.files)" />
-            <p class="text-sm font-medium text-slate-800">แตะเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่</p>
-            <p class="text-xs text-slate-500 mt-1">รองรับทุกนามสกุล ไม่จำกัดขนาด และรองรับการวางรูปจากคลิปบอร์ด (Ctrl+V)</p>
+          <div class="text-right">
+            <div id="receivedSummaryText" class="text-xs text-dim">ยังไม่มีไฟล์</div>
+            <button id="clearReceivedBtn" onclick="clearReceivedList()" class="hidden text-xs text-accent hover:underline mt-0.5">
+              ล้างรายการ
+            </button>
           </div>
+        </div>
 
-          <div class="flex gap-2">
-            <input type="text" id="textMessageInput" placeholder="พิมพ์ข้อความหรือวางลิงก์เพื่อส่ง..."
-              onkeydown="if(event.key==='Enter') sendTextMessage()"
-              class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-900" />
-            <button onclick="sendTextMessage()" class="bg-slate-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-slate-800 transition whitespace-nowrap">
-              ส่งข้อความ
+        <!-- รายการไฟล์และข้อความที่ได้รับ -->
+        <div id="receivedItemsContainer" class="flex-1 flex flex-col mt-4">
+          <div id="receivedEmptyState" class="flex-1 flex flex-col items-center justify-center text-center py-12 px-4">
+            <p class="text-xs font-medium text-sec">รายการที่ได้รับจะขึ้นที่นี่</p>
+            <p id="receivedEmptyHint" class="text-xs text-dim mt-1">
+              สแกน QR หรือใส่รหัส <span id="inlineCodeHint" class="text-main font-semibold">------</span> จากมือถือเพื่อเริ่ม
+            </p>
+          </div>
+          <div id="receivedList" class="space-y-2.5 hidden"></div>
+        </div>
+      </div>
+
+      <!-- การ์ดขวา: สแกนจากมือถือ หรือ สถานะเชื่อมต่ออยู่ -->
+      <div class="md:col-span-5">
+        <!-- สถานะยังไม่เชื่อมต่อ: แสดง QR Code และรหัส 6 หลัก -->
+        <div id="qrReceiveCard" class="card-surface rounded-2xl p-5">
+          <h3 class="text-xs font-medium text-dim">สแกนจากมือถือ</h3>
+
+          <div class="mt-4 flex flex-col items-center">
+            <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+              <div id="qrcode"></div>
+            </div>
+
+            <div id="myPairingCode" class="mt-3.5 text-2xl font-bold tracking-[0.28em] text-main pl-1">------</div>
+
+            <p class="text-[11px] text-dim text-center mt-2 leading-relaxed">
+              สแกนด้วยกล้องมือถือ หรือเปิด<br/>
+              <span id="currentHostDisplay" class="text-main font-medium"></span><br/>
+              แล้วกด <strong class="text-main">ส่งไฟล์</strong> ใส่รหัสด้านบน
+            </p>
+
+            <p class="text-[11px] text-dim text-center mt-3 leading-relaxed">
+              เครื่องใน Wi-Fi เดียวกันจะเห็นเครื่องนี้ชื่อ <strong id="displayDeviceName" class="text-sec"></strong> · ถ้าอีกเครื่องไม่เห็น (มักเป็น Mac กับ Windows) ให้ใส่รหัสด้านบนแทน แล้วกด <strong class="text-sec">จำไว้</strong>
+            </p>
+
+            <div class="flex items-center justify-center gap-2.5 mt-4 w-full">
+              <button onclick="copyShareLink()" class="px-4 py-2 rounded-xl text-xs font-medium btn-secondary transition">
+                แชร์ลิงก์
+              </button>
+              <button onclick="regenerateCode()" class="px-4 py-2 rounded-xl text-xs font-medium text-accent hover:opacity-80 border border-transparent transition">
+                เปลี่ยนรหัส
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- สถานะเชื่อมต่ออยู่ -->
+        <div id="connectedReceiveCard" class="hidden card-surface rounded-2xl p-5">
+          <div class="text-xs text-dim">เชื่อมต่ออยู่</div>
+          <div class="flex items-center gap-2 mt-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span id="receiveConnectedPeerName" class="text-sm font-semibold text-accent">Device</span>
+          </div>
+          <p class="text-xs text-dim mt-2 leading-relaxed">
+            ไฟล์และข้อความจากเครื่องนี้จะขึ้นในรายการไฟล์ · กดแท็บ <strong class="text-main">ส่งไฟล์</strong> ด้านบนเพื่อสลับฝั่ง
+          </p>
+          <div class="flex items-center gap-2.5 mt-4">
+            <button onclick="switchTab('send')" class="teal-btn px-4 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition">
+              <span>⇄</span>
+              <span>สลับเป็นฝั่งส่ง</span>
+            </button>
+            <button onclick="toggleQrModal(true)" class="px-4 py-2 rounded-xl text-xs font-medium btn-secondary transition">
+              แสดง QR
             </button>
           </div>
         </div>
       </div>
 
-      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-sm font-semibold text-slate-900">รายการไฟล์และข้อความ</h2>
-          <button onclick="clearTransferLog()" class="text-xs text-slate-400 hover:text-slate-700">ล้างรายการ</button>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VIEW 2: แท็บ "ส่งไฟล์" -->
+    <!-- ========================================== -->
+    <div id="sendView" class="hidden grid-cols-1 md:grid-cols-12 gap-5 flex-1 items-start">
+
+      <!-- แถบสถานะและกล่องส่งไฟล์ -->
+      <div class="md:col-span-5 md:order-2 space-y-4">
+
+        <!-- แถบหัวข้อเมื่อเชื่อมต่อแล้ว -->
+        <div id="sendConnectedHeader" class="hidden flex items-center justify-between text-xs px-1">
+          <div class="text-dim truncate pr-2">
+            ส่งไปที่ <span id="sendConnectedPeerName" class="text-main font-semibold">Device</span>
+          </div>
+          <div class="flex items-center gap-3 shrink-0">
+            <button onclick="switchTab('receive')" class="text-dim hover:text-main flex items-center gap-1">
+              <span>⇄</span>
+              <span>สลับเป็นฝั่งรับ</span>
+            </button>
+            <button onclick="disconnectPeer()" class="text-accent hover:underline font-medium">
+              เปลี่ยนเครื่อง
+            </button>
+          </div>
         </div>
-        <div id="transferList" class="space-y-2.5 max-h-[380px] overflow-y-auto">
-          <p id="emptyTransferMsg" class="text-xs text-slate-400 py-6 text-center">ยังไม่มีรายการรับหรือส่ง</p>
+
+        <!-- Step 1: เลือกเครื่องที่จะส่งไป -->
+        <div id="step1SelectDeviceCard" class="card-surface rounded-2xl p-5">
+          <div class="flex items-center gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center shrink-0">1</span>
+            <h3 class="text-sm font-semibold text-main">เลือกเครื่องที่จะส่งไป</h3>
+          </div>
+
+          <!-- เครื่องที่เจอใน Wi-Fi เดียวกัน -->
+          <div id="nearbyDevicesContainer" class="hidden mt-3 space-y-2"></div>
+
+          <p class="text-xs text-dim mt-3 leading-relaxed">
+            ใส่รหัส 6 ตัวที่แสดงบนเครื่องนั้น หรือสแกน QR ด้วยกล้องมือถือ
+          </p>
+
+          <!-- ช่องกรอกรหัส 6 ช่องแยกอิสระ -->
+          <div id="codeBoxesWrapper" class="grid grid-cols-6 gap-2 mt-3.5">
+            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="0"
+              class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
+            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="1"
+              class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
+            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="2"
+              class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
+            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="3"
+              class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
+            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="4"
+              class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
+            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="5"
+              class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
+          </div>
+
+          <p class="text-[11px] text-dim mt-3.5 leading-relaxed">
+            ไม่เห็นเครื่องที่จะส่ง? (มักเจอระหว่าง Mac กับ Windows) ใส่รหัส 6 ตัวแทน แล้วกด <strong class="text-sec">จำไว้</strong> ที่เครื่องรับ ครั้งหน้าจะขึ้นในรายการเอง
+          </p>
+        </div>
+
+        <!-- Step 2: เลือกไฟล์หรือพิมพ์ข้อความ -->
+        <div id="step2TransferCard" class="space-y-4 opacity-50 pointer-events-none transition-opacity">
+          <div id="step2HeaderLabel" class="flex items-center gap-2.5 px-1">
+            <span class="w-5 h-5 rounded-full bg-slate-500 text-white text-xs font-bold flex items-center justify-center shrink-0">2</span>
+            <h3 class="text-sm font-medium text-dim">เลือกไฟล์หรือพิมพ์ข้อความ</h3>
+          </div>
+
+          <!-- กล่องเลือกไฟล์เส้นประ -->
+          <div id="dropZone" onclick="document.getElementById('fileInput').click()"
+            class="card-surface dropzone-area border-2 border-dashed rounded-2xl p-7 text-center cursor-pointer transition">
+            <input type="file" id="fileInput" multiple class="hidden" onchange="handleFiles(this.files)" />
+            <div class="w-12 h-12 rounded-2xl logo-container p-2 flex items-center justify-center mx-auto mb-3 overflow-hidden">
+              <img class="brand-logo-img w-full h-full object-contain" src="https://i.postimg.cc/VvBWWhJq/N.png" alt="Dropple" />
+            </div>
+            <p class="text-sm font-semibold text-main">แตะเพื่อเลือกไฟล์</p>
+            <p class="text-xs text-dim mt-1">รูป วิดีโอ หรือไฟล์อะไรก็ได้ · เลือกได้หลายไฟล์</p>
+          </div>
+
+          <!-- กล่องพิมพ์ข้อความและวางจากคลิปบอร์ด -->
+          <div class="card-surface rounded-2xl p-4">
+            <textarea id="textMessageInput" rows="3" placeholder="พิมพ์หรือวางข้อความ ลิงก์ โค้ด... ปลายทางคัดลอกให้เลย"
+              onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendTextMessage(); }"
+              class="w-full sub-surface rounded-xl p-3 text-xs text-main placeholder-slate-400 focus:border-teal-500 focus:outline-none resize-none"></textarea>
+            <div class="flex items-center justify-end gap-2 mt-3">
+              <button type="button" onclick="pasteFromClipboard()"
+                class="px-3.5 py-2 rounded-xl text-xs font-medium btn-secondary transition">
+                วางจากคลิปบอร์ด
+              </button>
+              <button type="button" onclick="sendTextMessage()"
+                class="teal-btn px-4 py-2 rounded-xl text-xs font-medium transition">
+                ส่งข้อความ
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- การ์ดรายการที่ส่ง -->
+      <div class="md:col-span-7 md:order-1 card-surface rounded-2xl p-5 min-h-[220px] md:min-h-[380px] flex flex-col">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl teal-pill-active flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+            </div>
+            <div>
+              <h2 class="text-sm font-semibold text-main">รายการที่ส่ง</h2>
+              <p id="sentTargetSubtitle" class="text-xs text-dim">ยังไม่ได้เลือกเครื่องปลายทาง</p>
+            </div>
+          </div>
+
+          <div class="text-right">
+            <div id="sentSummaryText" class="text-xs text-dim">ยังไม่มีรายการ</div>
+            <button id="clearSentBtn" onclick="clearSentList()" class="hidden text-xs text-accent hover:underline mt-0.5">
+              ล้างรายการ
+            </button>
+          </div>
+        </div>
+
+        <div id="sentItemsContainer" class="flex-1 flex flex-col mt-4">
+          <div id="sentEmptyState" class="flex-1 flex flex-col items-center justify-center text-center py-10">
+            <p class="text-xs text-dim">รายการที่ส่งจะขึ้นที่นี่</p>
+          </div>
+          <div id="sentList" class="space-y-2.5 hidden"></div>
         </div>
       </div>
-    </section>
 
-  </main>
+    </div>
 
-  <footer class="text-center text-xs text-slate-400 py-4 border-t border-slate-200 bg-white">
-    ข้อมูลถูกส่งตรงระหว่างอุปกรณ์ผ่าน WebRTC ไม่มีการจัดเก็บบนเซิร์ฟเวอร์
+  </div>
+
+  <!-- Footer -->
+  <footer class="text-center text-[11px] text-dim py-3 px-4">
+    © 2026 Natchanon. All Rights Reserved.
   </footer>
 
   <script>
     // ==========================================
-    // 1. ตั้งค่า FIREBASE CONFIG (dropplenatchanon)
+    // 1. FIREBASE CONFIG (dropplenatchanon)
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyCNCAzdmKg59CLCn9DSe2HfbKWJWPmMNI8",
@@ -227,25 +693,117 @@
     const db = firebase.database();
 
     // ==========================================
-    // 2. ตัวแปรระบบและข้อมูลอุปกรณ์
+    // 2. ตัวแปรระบบ, ธีม และโลโก้
     // ==========================================
     const CHUNK_SIZE = 16384; // 16KB ปลอดภัยทั้ง iOS Safari และ Chrome
+    const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const LOGO_LIGHT_URL = 'https://i.postimg.cc/GpWPwRG0/N.png';
+    const LOGO_DARK_URL = 'https://i.postimg.cc/VvBWWhJq/N.png';
+
+    let themePreference = localStorage.getItem('dp_theme') || 'system';
+    const systemDarkMedia = window.matchMedia('(prefers-color-scheme: dark)');
+
     let peer = null;
     let myPeerId = null;
     let myCode = null;
     let wifiRoomKey = null;
     let activeConn = null;
+    let activePeerInfo = null;
     let pendingIncomingConn = null;
     let pendingRequesterInfo = null;
     let countdownTimer = null;
+    let savedDirectoryHandle = null;
+    let pendingClipboardText = null;
 
+    let receivedStats = { count: 0, bytes: 0 };
+    let sentStats = { count: 0, bytes: 0 };
     const incomingFiles = {};
 
-    const myToken = localStorage.getItem('ld_token') || crypto.randomUUID();
-    localStorage.setItem('ld_token', myToken);
+    const myToken = localStorage.getItem('dp_token') || crypto.randomUUID();
+    localStorage.setItem('dp_token', myToken);
 
-    let myDeviceName = localStorage.getItem('ld_device_name') || detectDeviceName();
-    localStorage.setItem('ld_device_name', myDeviceName);
+    let myDeviceName = localStorage.getItem('dp_device_name') || detectDeviceName();
+    localStorage.setItem('dp_device_name', myDeviceName);
+
+    let appSettings = JSON.parse(localStorage.getItem('dp_settings') || JSON.stringify({
+      autoPreview: false,
+      autoCopyText: true,
+      soundAlert: true
+    }));
+
+    function applyTheme() {
+      const isDark = themePreference === 'dark' || (themePreference === 'system' && systemDarkMedia.matches);
+      document.documentElement.classList.toggle('dark', isDark);
+
+      // อัปเดตโลโก้ทุกจุดในหน้าเว็บตามสีพื้นหลัง
+      const logoSrc = isDark ? LOGO_DARK_URL : LOGO_LIGHT_URL;
+      document.querySelectorAll('.brand-logo-img').forEach(img => {
+        if (img.src !== logoSrc) img.src = logoSrc;
+      });
+
+      // อัปเดตปุ่มบน Header
+      const sunIcon = document.getElementById('themeIconSun');
+      const moonIcon = document.getElementById('themeIconMoon');
+      const sysIcon = document.getElementById('themeIconSystem');
+      const label = document.getElementById('quickThemeLabel');
+
+      if (sunIcon && moonIcon && sysIcon && label) {
+        sunIcon.classList.toggle('hidden', themePreference !== 'light');
+        moonIcon.classList.toggle('hidden', themePreference !== 'dark');
+        sysIcon.classList.toggle('hidden', themePreference !== 'system');
+        label.textContent = themePreference === 'light' ? 'สีขาว' : themePreference === 'dark' ? 'สีดำ' : 'ตามระบบ';
+      }
+
+      // อัปเดตปุ่มเลือกในหน้าต่างตั้งค่า
+      const optMap = {
+        system: document.getElementById('themeOptSystem'),
+        light: document.getElementById('themeOptLight'),
+        dark: document.getElementById('themeOptDark')
+      };
+      Object.entries(optMap).forEach(([key, btn]) => {
+        if (!btn) return;
+        if (key === themePreference) {
+          btn.className = 'py-2 px-3 rounded-lg text-xs font-semibold teal-pill-active transition text-center';
+        } else {
+          btn.className = 'py-2 px-3 rounded-lg text-xs font-medium text-dim hover:text-main transition text-center border border-transparent';
+        }
+      });
+    }
+
+    function setThemePreference(mode) {
+      themePreference = mode;
+      localStorage.setItem('dp_theme', mode);
+      applyTheme();
+    }
+
+    function cycleTheme() {
+      const order = ['system', 'light', 'dark'];
+      const next = order[(order.indexOf(themePreference) + 1) % order.length];
+      setThemePreference(next);
+      const names = { system: 'ตามระบบ', light: 'โหมดสีขาว', dark: 'โหมดสีดำ' };
+      showToast(`เปลี่ยนธีมเป็น${names[next]}`);
+    }
+
+    systemDarkMedia.addEventListener('change', () => {
+      if (themePreference === 'system') applyTheme();
+    });
+
+    // ย่อลิงก์ให้สั้นและสะอาด
+    function getShortDisplayUrl() {
+      if (window.location.pathname.includes('/__vfs__/')) {
+        return window.location.host;
+      }
+      const cleanPath = window.location.pathname.replace(/\/index\.html$/i, '').replace(/\/$/, '');
+      return `${window.location.host}${cleanPath}`;
+    }
+
+    function getShareBaseUrl() {
+      if (window.location.pathname.includes('/__vfs__/')) {
+        return `${window.location.origin}${window.location.pathname}`;
+      }
+      const cleanPath = window.location.pathname.replace(/\/index\.html$/i, '').replace(/\/$/, '');
+      return `${window.location.origin}${cleanPath || '/'}`;
+    }
 
     function detectDeviceName() {
       const ua = navigator.userAgent;
@@ -262,39 +820,63 @@
       else if (/Safari/.test(ua) && !/Chrome/.test(ua)) browser = 'Safari';
       else if (/Firefox/.test(ua)) browser = 'Firefox';
 
-      return `${os} ${browser}`;
+      return `${os} · ${browser}`;
     }
 
-    // Custom Toast Notification (แทนที่ alert แบบเดิม)
     function showToast(message, isError = false) {
       const container = document.getElementById('toastContainer');
       const toast = document.createElement('div');
-      toast.className = `toast-enter pointer-events-auto px-4 py-3 rounded-xl shadow-lg border text-xs font-medium ${
-        isError
-          ? 'bg-rose-950 text-rose-50 border-rose-800'
-          : 'bg-slate-900 text-white border-slate-800'
-      }`;
+      toast.style.backgroundColor = isError ? 'rgba(136, 19, 55, 0.96)' : 'var(--toast-bg)';
+      toast.style.color = isError ? '#ffe4e6' : 'var(--toast-text)';
+      toast.style.borderColor = isError ? '#9f1239' : 'var(--toast-border)';
+      toast.className = 'pointer-events-auto px-4 py-2.5 rounded-xl shadow-xl border text-xs font-medium transition-opacity duration-200';
       toast.textContent = message;
       container.appendChild(toast);
       setTimeout(() => {
         toast.style.opacity = '0';
-        toast.style.transition = 'opacity 0.2s ease';
-        setTimeout(() => toast.remove(), 200);
-      }, 3200);
+        setTimeout(() => toast.remove(), 220);
+      }, 3000);
     }
 
+    function playNotificationSound() {
+      if (!appSettings.soundAlert) return;
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(587.33, now);
+        osc1.frequency.setValueAtTime(880, now + 0.09);
+        gain1.gain.setValueAtTime(0.08, now);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.35);
+      } catch (e) {}
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && pendingClipboardText && appSettings.autoCopyText) {
+        navigator.clipboard?.writeText(pendingClipboardText).catch(() => {});
+        showToast('คัดลอกข้อความที่ได้รับลงคลิปบอร์ดแล้ว');
+        pendingClipboardText = null;
+      }
+    });
+
     // ==========================================
-    // 3. ป้องกันการเปิดหลายแท็บพร้อมกัน
+    // 3. ป้องกันเปิดซ้ำหลายแท็บ
     // ==========================================
-    const tabChannel = new BroadcastChannel('dropple_natchanon_tab_guard');
+    const tabChannel = new BroadcastChannel('dropple_natchanon_guard_v2');
     tabChannel.postMessage({ type: 'ping' });
     tabChannel.onmessage = (e) => {
       if (e.data.type === 'ping') {
         tabChannel.postMessage({ type: 'pong' });
-      } else if (e.data.type === 'pong') {
-        document.getElementById('duplicateTabOverlay').classList.remove('hidden');
-        document.getElementById('duplicateTabOverlay').classList.add('flex');
-      } else if (e.data.type === 'takeover') {
+      } else if (e.data.type === 'pong' || e.data.type === 'takeover') {
         document.getElementById('duplicateTabOverlay').classList.remove('hidden');
         document.getElementById('duplicateTabOverlay').classList.add('flex');
       }
@@ -310,8 +892,11 @@
     // 4. เริ่มต้นระบบ PeerJS และ Firebase Signaling
     // ==========================================
     async function initApp() {
+      applyTheme();
+      document.getElementById('currentHostDisplay').textContent = getShortDisplayUrl();
       updateDeviceNameUI();
-      renderTrustedList();
+      syncSettingsUI();
+      setupCodeBoxes();
 
       peer = new Peer({
         config: {
@@ -347,22 +932,32 @@
 
     function setConnectionStatus(online) {
       const dot = document.getElementById('statusDot');
-      const text = document.getElementById('statusText');
+      const sub = document.getElementById('headerSubtitle');
       if (online) {
         dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
-        text.textContent = 'พร้อมใช้งาน';
+        sub.textContent = myDeviceName;
       } else {
         dot.className = 'w-2 h-2 rounded-full bg-amber-400';
-        text.textContent = 'กำลังเชื่อมต่อใหม่...';
+        sub.textContent = 'กำลังเชื่อมต่อใหม่...';
       }
+    }
+
+    function generateRandomCode() {
+      let res = '';
+      for (let i = 0; i < 6; i++) {
+        res += CODE_CHARS.charAt(Math.floor(Math.random() * CODE_CHARS.length));
+      }
+      return res;
     }
 
     async function registerPairingCode() {
       if (myCode) {
         await db.ref(`codes/${myCode}`).remove();
       }
-      myCode = Math.floor(100000 + Math.random() * 900000).toString();
+      myCode = generateRandomCode();
       document.getElementById('myPairingCode').textContent = myCode;
+      document.getElementById('modalPairingCode').textContent = myCode;
+      document.getElementById('inlineCodeHint').textContent = myCode;
 
       const codeRef = db.ref(`codes/${myCode}`);
       await codeRef.set({
@@ -372,14 +967,25 @@
       });
       codeRef.onDisconnect().remove();
 
+      const shareUrl = `${getShareBaseUrl()}?code=${myCode}`;
+
       const qrContainer = document.getElementById('qrcode');
       qrContainer.innerHTML = '';
-      const shareUrl = `${window.location.origin}${window.location.pathname}?code=${myCode}`;
       new QRCode(qrContainer, {
         text: shareUrl,
-        width: 128,
-        height: 128,
-        colorDark: '#0f172a',
+        width: 152,
+        height: 152,
+        colorDark: '#000000',
+        colorLight: '#ffffff'
+      });
+
+      const modalQrContainer = document.getElementById('modalQrcode');
+      modalQrContainer.innerHTML = '';
+      new QRCode(modalQrContainer, {
+        text: shareUrl,
+        width: 180,
+        height: 180,
+        colorDark: '#000000',
         colorLight: '#ffffff'
       });
     }
@@ -393,9 +999,9 @@
 
     function copyShareLink() {
       if (!myCode) return;
-      const shareUrl = `${window.location.origin}${window.location.pathname}?code=${myCode}`;
-      navigator.clipboard.writeText(shareUrl);
-      showToast('คัดลอกลิงก์เชื่อมต่อแล้ว');
+      const shareUrl = `${getShareBaseUrl()}?code=${myCode}`;
+      navigator.clipboard?.writeText(shareUrl);
+      showToast('คัดลอกลิงก์แล้ว');
     }
 
     async function joinWifiRoom() {
@@ -411,49 +1017,94 @@
         });
         myRoomRef.onDisconnect().remove();
 
-        document.getElementById('wifiBadge').textContent = 'ออนไลน์';
-
         db.ref(`wifi_rooms/${wifiRoomKey}`).on('value', (snapshot) => {
           const devices = snapshot.val() || {};
           renderNearbyDevices(devices);
         });
-      } catch (e) {
-        document.getElementById('wifiBadge').textContent = 'ใช้รหัส 6 หลัก';
-      }
+      } catch (e) {}
     }
 
     function renderNearbyDevices(devices) {
-      const container = document.getElementById('nearbyDevicesList');
+      const container = document.getElementById('nearbyDevicesContainer');
       const entries = Object.values(devices).filter(d => d.peerId !== myPeerId);
 
       if (entries.length === 0) {
-        container.innerHTML = '<p class="text-xs text-slate-400 py-3 text-center">ไม่พบเครื่องอื่นในเครือข่ายเดียวกัน</p>';
+        container.classList.add('hidden');
+        container.innerHTML = '';
         return;
       }
 
+      container.classList.remove('hidden');
       container.innerHTML = entries.map(device => `
-        <button onclick="initiateConnection('${device.peerId}', '${escapeHtml(device.deviceName)}')"
-          class="w-full flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:border-slate-900 hover:bg-slate-50 transition text-left">
-          <div>
-            <div class="text-sm font-medium text-slate-900">${escapeHtml(device.deviceName)}</div>
-            <div class="text-[11px] text-slate-500">แตะเพื่อเชื่อมต่อ</div>
+        <button onclick="initiateConnection('${device.peerId}', '${escapeHtml(device.deviceName)}', false)"
+          class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl sub-surface hover:border-teal-500 transition text-left">
+          <div class="flex items-center gap-2.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span class="text-xs font-semibold text-main">${escapeHtml(device.deviceName)}</span>
           </div>
-          <span class="text-xs font-medium text-slate-700 bg-slate-100 px-2.5 py-1 rounded">เลือก</span>
+          <span class="text-[11px] font-medium text-accent">แตะเพื่อส่ง</span>
         </button>
       `).join('');
     }
 
     // ==========================================
-    // 5. การจับคู่และยืนยันสิทธิ์ (Handshake)
+    // 5. จัดการช่องรหัส 6 ตัวและการเชื่อมต่อ
     // ==========================================
-    async function connectByCode() {
-      const code = document.getElementById('targetCodeInput').value.trim();
-      if (code.length !== 6) {
-        showToast('กรุณากรอกรหัส 6 หลักให้ครบถ้วน', true);
-        return;
+    function setupCodeBoxes() {
+      const boxes = document.querySelectorAll('.code-box');
+      boxes.forEach((box, idx) => {
+        box.addEventListener('input', (e) => {
+          const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+          e.target.value = val.slice(-1);
+          if (e.target.value && idx < boxes.length - 1) {
+            boxes[idx + 1].focus();
+          }
+          checkSixBoxesAndConnect();
+        });
+
+        box.addEventListener('keydown', (e) => {
+          if (e.key === 'Backspace' && !box.value && idx > 0) {
+            boxes[idx - 1].focus();
+            boxes[idx - 1].value = '';
+          }
+        });
+
+        box.addEventListener('paste', (e) => {
+          e.preventDefault();
+          const pasted = (e.clipboardData.getData('text') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+          pasted.split('').forEach((char, i) => {
+            if (boxes[i]) boxes[i].value = char;
+          });
+          if (pasted.length > 0) {
+            boxes[Math.min(pasted.length, 5)].focus();
+          }
+          checkSixBoxesAndConnect();
+        });
+      });
+    }
+
+    function getEnteredCode() {
+      return Array.from(document.querySelectorAll('.code-box')).map(b => b.value).join('').toUpperCase();
+    }
+
+    function clearCodeBoxes() {
+      document.querySelectorAll('.code-box').forEach(b => b.value = '');
+    }
+
+    function checkSixBoxesAndConnect() {
+      const code = getEnteredCode();
+      if (code.length === 6) {
+        connectByCode(code);
       }
+    }
+
+    async function connectByCode(codeInput) {
+      const code = (codeInput || getEnteredCode()).trim().toUpperCase();
+      if (code.length !== 6) return;
+
       if (code === myCode) {
         showToast('ไม่สามารถเชื่อมต่อกับเครื่องตัวเองได้', true);
+        clearCodeBoxes();
         return;
       }
 
@@ -464,39 +1115,45 @@
           showToast('ไม่พบรหัสนี้ หรือเครื่องปลายทางปิดหน้าเว็บไปแล้ว', true);
           return;
         }
-        initiateConnection(target.peerId, target.deviceName);
+        initiateConnection(target.peerId, target.deviceName, true);
       } catch (err) {
-        showToast('ไม่สามารถอ่านข้อมูลจากฐานข้อมูลได้ กรุณาตรวจสอบ Firebase Rules', true);
+        showToast('ไม่สามารถอ่านข้อมูลจาก Firebase ได้ กรุณาเช็ก Rules', true);
       }
     }
 
     function checkUrlCodeParam() {
       const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
-      if (code && code.length === 6) {
-        document.getElementById('targetCodeInput').value = code;
+      const code = (params.get('code') || '').toUpperCase();
+      if (code.length === 6) {
         window.history.replaceState({}, document.title, window.location.pathname);
-        connectByCode();
+        switchTab('send');
+        const boxes = document.querySelectorAll('.code-box');
+        code.split('').forEach((c, i) => { if (boxes[i]) boxes[i].value = c; });
+        connectByCode(code);
       }
     }
 
-    function initiateConnection(targetPeerId, targetName) {
+    function initiateConnection(targetPeerId, targetName, viaCode = false) {
       if (activeConn) activeConn.close();
-      showToast(`กำลังส่งคำขอไปยัง ${targetName}...`);
+      showToast(`กำลังเชื่อมต่อกับ ${targetName}...`);
 
       const conn = peer.connect(targetPeerId, { reliable: true });
       conn.on('open', () => {
         conn.send({
           type: 'handshake-hello',
           deviceName: myDeviceName,
-          token: myToken
+          token: myToken,
+          viaCode
         });
       });
 
       conn.on('data', (data) => {
         if (data.type === 'handshake-accepted') {
-          activateSession(conn, data.deviceName || targetName);
-          showToast(`เชื่อมต่อกับ ${data.deviceName || targetName} สำเร็จ`);
+          activateSession(conn, {
+            name: data.deviceName || targetName,
+            token: data.token || null
+          });
+          switchTab('send');
         } else if (data.type === 'handshake-rejected') {
           showToast('เครื่องปลายทางปฏิเสธการเชื่อมต่อ', true);
           conn.close();
@@ -512,10 +1169,14 @@
       conn.on('data', (data) => {
         if (data.type === 'handshake-hello') {
           const trusted = getTrustedDevices();
-          if (trusted[data.token]) {
-            conn.send({ type: 'handshake-accepted', deviceName: myDeviceName });
-            activateSession(conn, data.deviceName);
-            showToast(`เชื่อมต่ออัตโนมัติกับ ${data.deviceName}`);
+          const isTrusted = Boolean(trusted[data.token]);
+
+          if (isTrusted || data.viaCode) {
+            conn.send({ type: 'handshake-accepted', deviceName: myDeviceName, token: myToken });
+            activateSession(conn, { name: data.deviceName, token: data.token });
+            if (!isTrusted) {
+              showRememberBar(data.deviceName, data.token);
+            }
           } else {
             pendingIncomingConn = conn;
             pendingRequesterInfo = { token: data.token, name: data.deviceName };
@@ -537,14 +1198,12 @@
       modal.classList.add('flex');
 
       let sec = 30;
-      document.getElementById('requestCountdown').textContent = `${sec} วินาที`;
+      document.getElementById('requestCountdown').textContent = sec;
       clearInterval(countdownTimer);
       countdownTimer = setInterval(() => {
         sec--;
-        document.getElementById('requestCountdown').textContent = `${sec} วินาที`;
-        if (sec <= 0) {
-          respondConnection(false);
-        }
+        document.getElementById('requestCountdown').textContent = sec;
+        if (sec <= 0) respondConnection(false);
       }, 1000);
     }
 
@@ -560,8 +1219,8 @@
         if (document.getElementById('rememberDeviceCheck').checked && pendingRequesterInfo) {
           saveTrustedDevice(pendingRequesterInfo.token, pendingRequesterInfo.name);
         }
-        pendingIncomingConn.send({ type: 'handshake-accepted', deviceName: myDeviceName });
-        activateSession(pendingIncomingConn, pendingRequesterInfo.name);
+        pendingIncomingConn.send({ type: 'handshake-accepted', deviceName: myDeviceName, token: myToken });
+        activateSession(pendingIncomingConn, pendingRequesterInfo);
       } else {
         pendingIncomingConn.send({ type: 'handshake-rejected' });
         pendingIncomingConn.close();
@@ -569,35 +1228,123 @@
       pendingIncomingConn = null;
     }
 
-    function activateSession(conn, peerName) {
+    function activateSession(conn, peerInfo) {
       activeConn = conn;
-      document.getElementById('noConnectionState').classList.add('hidden');
-      document.getElementById('connectedState').classList.remove('hidden');
-      document.getElementById('connectedPeerName').textContent = peerName;
+      activePeerInfo = peerInfo;
+
+      document.getElementById('qrReceiveCard').classList.add('hidden');
+      document.getElementById('connectedReceiveCard').classList.remove('hidden');
+      document.getElementById('receiveConnectedPeerName').textContent = peerInfo.name;
+      document.getElementById('receivedEmptyHint').textContent = `รอ ${peerInfo.name} ส่งไฟล์หรือข้อความมา`;
+
+      document.getElementById('step1SelectDeviceCard').classList.add('hidden');
+      document.getElementById('sendConnectedHeader').classList.remove('hidden');
+      document.getElementById('sendConnectedPeerName').textContent = peerInfo.name;
+      document.getElementById('sentTargetSubtitle').textContent = `ส่งไปที่ ${peerInfo.name}`;
+
+      const step2 = document.getElementById('step2TransferCard');
+      step2.classList.remove('opacity-50', 'pointer-events-none');
+      document.getElementById('step2HeaderLabel').classList.add('hidden');
     }
 
     function disconnectPeer() {
       if (activeConn) activeConn.close();
       resetSessionUI();
-      showToast('ตัดการเชื่อมต่อแล้ว');
     }
 
     function resetSessionUI() {
       activeConn = null;
-      document.getElementById('noConnectionState').classList.remove('hidden');
-      document.getElementById('connectedState').classList.add('hidden');
+      activePeerInfo = null;
+      dismissRememberBar();
+      clearCodeBoxes();
+
+      document.getElementById('qrReceiveCard').classList.remove('hidden');
+      document.getElementById('connectedReceiveCard').classList.add('hidden');
+      document.getElementById('receivedEmptyHint').innerHTML =
+        `สแกน QR หรือใส่รหัส <span class="text-main font-semibold">${myCode || '------'}</span> จากมือถือเพื่อเริ่ม`;
+
+      document.getElementById('step1SelectDeviceCard').classList.remove('hidden');
+      document.getElementById('sendConnectedHeader').classList.add('hidden');
+      document.getElementById('sentTargetSubtitle').textContent = 'ยังไม่ได้เลือกเครื่องปลายทาง';
+
+      const step2 = document.getElementById('step2TransferCard');
+      step2.classList.add('opacity-50', 'pointer-events-none');
+      document.getElementById('step2HeaderLabel').classList.remove('hidden');
+    }
+
+    function showRememberBar(name, token) {
+      if (!token) return;
+      document.getElementById('rememberBarName').textContent = name;
+      document.getElementById('rememberBar').dataset.token = token;
+      document.getElementById('rememberBar').dataset.name = name;
+      document.getElementById('rememberBar').classList.remove('hidden');
+    }
+
+    function confirmRememberCurrentPeer() {
+      const bar = document.getElementById('rememberBar');
+      const token = bar.dataset.token;
+      const name = bar.dataset.name;
+      if (token && name) {
+        saveTrustedDevice(token, name);
+        showToast(`จำ ${name} เรียบร้อยแล้ว`);
+      }
+      dismissRememberBar();
+    }
+
+    function dismissRememberBar() {
+      document.getElementById('rememberBar').classList.add('hidden');
     }
 
     // ==========================================
-    // 6. การส่งและรับไฟล์ (Stream Chunking) + ข้อความ
+    // 6. การสลับแท็บ (รับไฟล์ / ส่งไฟล์)
     // ==========================================
+    function switchTab(tab) {
+      const receiveBtn = document.getElementById('tabReceiveBtn');
+      const sendBtn = document.getElementById('tabSendBtn');
+      const receiveView = document.getElementById('receiveView');
+      const sendView = document.getElementById('sendView');
+
+      if (tab === 'receive') {
+        receiveBtn.className = 'teal-pill-active py-2 px-4 rounded-xl text-xs font-medium flex items-center justify-center gap-2 transition';
+        sendBtn.className = 'py-2 px-4 rounded-xl text-xs font-medium text-dim hover:text-main flex items-center justify-center gap-2 transition border border-transparent';
+        receiveView.classList.remove('hidden');
+        receiveView.classList.add('grid');
+        sendView.classList.add('hidden');
+        sendView.classList.remove('grid');
+      } else {
+        sendBtn.className = 'teal-pill-active py-2 px-4 rounded-xl text-xs font-medium flex items-center justify-center gap-2 transition';
+        receiveBtn.className = 'py-2 px-4 rounded-xl text-xs font-medium text-dim hover:text-main flex items-center justify-center gap-2 transition border border-transparent';
+        sendView.classList.remove('hidden');
+        sendView.classList.add('grid');
+        receiveView.classList.add('hidden');
+        receiveView.classList.remove('grid');
+      }
+    }
+
+    // ==========================================
+    // 7. การส่งและรับไฟล์ (16KB Stream) + ข้อความ
+    // ==========================================
+    async function pasteFromClipboard() {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          document.getElementById('textMessageInput').value = text;
+          document.getElementById('textMessageInput').focus();
+        } else {
+          showToast('ไม่พบข้อความในคลิปบอร์ด', true);
+        }
+      } catch (e) {
+        showToast('เบราว์เซอร์ไม่อนุญาตให้อ่านคลิปบอร์ดอัตโนมัติ กรุณากดวางในช่องข้อความ', true);
+      }
+    }
+
     function sendTextMessage() {
       const input = document.getElementById('textMessageInput');
       const text = input.value.trim();
       if (!text || !activeConn) return;
 
       activeConn.send({ type: 'text-message', text });
-      appendTextLog(text, 'ส่งแล้ว');
+      appendSentTextItem(text);
       input.value = '';
     }
 
@@ -607,8 +1354,7 @@
       for (const file of fileList) {
         const fileId = crypto.randomUUID();
         const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
-
-        const progressEl = appendFileLog(fileId, file.name, file.size, 'กำลังส่ง 0%');
+        const statusEl = appendSentFileItem(fileId, file.name, file.size);
 
         activeConn.send({
           type: 'file-start',
@@ -619,7 +1365,6 @@
           totalChunks
         });
 
-        // อ่านไฟล์ทีละ 16KB ด้วย slice() เพื่อไม่ให้กินแรมเครื่องมือถือ
         for (let i = 0; i < totalChunks; i++) {
           while (activeConn && activeConn.dataChannel && activeConn.dataChannel.bufferedAmount > CHUNK_SIZE * 16) {
             await new Promise(r => setTimeout(r, 15));
@@ -637,132 +1382,356 @@
             chunk
           });
 
-          if (i % 10 === 0 || i === totalChunks - 1) {
+          if (i % 12 === 0 || i === totalChunks - 1) {
             const pct = Math.round(((i + 1) / totalChunks) * 100);
-            progressEl.textContent = `กำลังส่ง ${pct}%`;
+            statusEl.textContent = `${pct}%`;
           }
         }
 
         activeConn.send({ type: 'file-end', fileId });
-        progressEl.textContent = 'ส่งสำเร็จ';
-        progressEl.className = 'text-xs font-medium text-emerald-600 whitespace-nowrap';
+        statusEl.innerHTML = `
+          <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        `;
+        sentStats.count++;
+        sentStats.bytes += file.size;
+        updateSentSummary();
       }
 
       document.getElementById('fileInput').value = '';
     }
 
-    function handleIncomingPayload(data) {
+    async function handleIncomingPayload(data) {
       if (data.type === 'text-message') {
-        appendTextLog(data.text, 'ได้รับข้อความ');
+        playNotificationSound();
+        appendReceivedTextItem(data.text);
+
+        if (appSettings.autoCopyText) {
+          if (document.hidden) {
+            pendingClipboardText = data.text;
+          } else {
+            navigator.clipboard?.writeText(data.text).catch(() => {});
+          }
+        }
         showToast('ได้รับข้อความใหม่');
       } else if (data.type === 'file-start') {
-        const progressEl = appendFileLog(data.fileId, data.name, data.size, 'กำลังรับ 0%');
+        const statusEl = appendReceivedFileSkeleton(data.fileId, data.name, data.size);
         incomingFiles[data.fileId] = {
           meta: data,
           chunks: new Array(data.totalChunks),
           receivedCount: 0,
-          progressEl
+          statusEl
         };
       } else if (data.type === 'file-chunk') {
         const record = incomingFiles[data.fileId];
         if (!record) return;
         record.chunks[data.index] = data.chunk;
         record.receivedCount++;
-        if (record.receivedCount % 10 === 0 || record.receivedCount === record.meta.totalChunks) {
+        if (record.receivedCount % 12 === 0 || record.receivedCount === record.meta.totalChunks) {
           const pct = Math.round((record.receivedCount / record.meta.totalChunks) * 100);
-          record.progressEl.textContent = `กำลังรับ ${pct}%`;
+          record.statusEl.textContent = `${pct}%`;
         }
       } else if (data.type === 'file-end') {
         const record = incomingFiles[data.fileId];
         if (!record) return;
-        const blob = new Blob(record.chunks, { type: record.meta.mime });
-        const downloadUrl = URL.createObjectURL(blob);
 
-        record.progressEl.outerHTML = `
-          <a href="${downloadUrl}" download="${escapeHtml(record.meta.name)}"
-            class="text-xs font-medium bg-slate-900 text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition whitespace-nowrap">
-            ดาวน์โหลด
-          </a>
-        `;
-        showToast(`ได้รับไฟล์ ${record.meta.name}`);
+        playNotificationSound();
+        const blob = new Blob(record.chunks, { type: record.meta.mime });
+        const blobUrl = URL.createObjectURL(blob);
+
+        if (savedDirectoryHandle) {
+          try {
+            const fileHandle = await savedDirectoryHandle.getFileHandle(record.meta.name, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+          } catch (e) {
+            triggerAutoDownload(blobUrl, record.meta.name);
+          }
+        } else {
+          triggerAutoDownload(blobUrl, record.meta.name);
+        }
+
+        finalizeReceivedFileItem(record.statusEl, record.meta, blobUrl);
+
+        receivedStats.count++;
+        receivedStats.bytes += record.meta.size;
+        updateReceivedSummary();
+
+        if (appSettings.autoPreview) {
+          openPreviewModal(record.meta.name, record.meta.mime, blobUrl);
+        }
+
         delete incomingFiles[data.fileId];
       }
     }
 
-    // รองรับการวางรูปภาพหรือไฟล์จากคลิปบอร์ด (Ctrl+V / Cmd+V)
+    function triggerAutoDownload(url, filename) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    // ==========================================
+    // 8. การแสดงผลรายการไฟล์และข้อความ
+    // ==========================================
+    function getCurrentTimeStr() {
+      const now = new Date();
+      return now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function appendReceivedFileSkeleton(id, name, size) {
+      document.getElementById('receivedEmptyState').classList.add('hidden');
+      const list = document.getElementById('receivedList');
+      list.classList.remove('hidden');
+
+      const sender = activePeerInfo?.name || 'อุปกรณ์';
+      const item = document.createElement('div');
+      item.id = `recv_row_${id}`;
+      item.className = 'sub-surface rounded-xl p-3 flex items-center justify-between gap-3 transition';
+      item.innerHTML = `
+        <div class="flex items-center gap-3 min-w-0">
+          <div id="recv_thumb_${id}" class="w-10 h-10 rounded-lg card-surface flex items-center justify-center text-dim shrink-0 overflow-hidden">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-main truncate">${escapeHtml(name)}</div>
+            <div id="recv_meta_${id}" class="text-[11px] text-dim mt-0.5 truncate">จาก ${escapeHtml(sender)} · ${formatBytes(size)} · กำลังรับ...</div>
+          </div>
+        </div>
+        <span id="recv_status_${id}" class="text-xs font-medium text-accent shrink-0">0%</span>
+      `;
+      list.prepend(item);
+      return document.getElementById(`recv_status_${id}`);
+    }
+
+    function finalizeReceivedFileItem(statusEl, meta, blobUrl) {
+      const id = meta.fileId;
+      const sender = activePeerInfo?.name || 'อุปกรณ์';
+      const timeStr = getCurrentTimeStr();
+      const folderText = savedDirectoryHandle ? `บันทึกใน ${savedDirectoryHandle.name}` : 'บันทึกในดาวน์โหลด';
+
+      const metaEl = document.getElementById(`recv_meta_${id}`);
+      if (metaEl) {
+        metaEl.textContent = `จาก ${sender} · ${formatBytes(meta.size)} · ${folderText} · ${timeStr}`;
+      }
+
+      const thumbEl = document.getElementById(`recv_thumb_${id}`);
+      if (thumbEl && meta.mime.startsWith('image/')) {
+        thumbEl.innerHTML = `<img src="${blobUrl}" class="w-full h-full object-cover" alt="" />`;
+      }
+
+      statusEl.innerHTML = `
+        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      `;
+
+      const row = document.getElementById(`recv_row_${id}`);
+      if (row) {
+        row.classList.add('cursor-pointer', 'hover:border-teal-500');
+        row.onclick = () => openPreviewModal(meta.name, meta.mime, blobUrl);
+      }
+    }
+
+    function appendReceivedTextItem(text) {
+      document.getElementById('receivedEmptyState').classList.add('hidden');
+      const list = document.getElementById('receivedList');
+      list.classList.remove('hidden');
+
+      const sender = activePeerInfo?.name || 'อุปกรณ์';
+      const timeStr = getCurrentTimeStr();
+      const item = document.createElement('div');
+      item.className = 'sub-surface rounded-xl p-3 flex items-start justify-between gap-3';
+      item.innerHTML = `
+        <div class="min-w-0 flex-1">
+          <div class="text-[11px] text-dim mb-1">ข้อความจาก ${escapeHtml(sender)} · ${timeStr}</div>
+          <div class="text-xs text-main break-words whitespace-pre-wrap">${escapeHtml(text)}</div>
+        </div>
+        <button onclick="navigator.clipboard.writeText(this.dataset.text); showToast('คัดลอกข้อความแล้ว')"
+          data-text="${escapeHtml(text)}"
+          class="px-2.5 py-1 rounded-lg text-[11px] font-medium btn-secondary shrink-0">
+          คัดลอก
+        </button>
+      `;
+      list.prepend(item);
+
+      receivedStats.count++;
+      updateReceivedSummary();
+    }
+
+    function appendSentFileItem(id, name, size) {
+      document.getElementById('sentEmptyState').classList.add('hidden');
+      const list = document.getElementById('sentList');
+      list.classList.remove('hidden');
+
+      const item = document.createElement('div');
+      item.className = 'sub-surface rounded-xl p-3 flex items-center justify-between gap-3';
+      item.innerHTML = `
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-9 h-9 rounded-lg card-surface flex items-center justify-center text-dim shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-main truncate">${escapeHtml(name)}</div>
+            <div class="text-[11px] text-dim mt-0.5 truncate">${formatBytes(size)} · บันทึกเป็น ${escapeHtml(name)}</div>
+          </div>
+        </div>
+        <span id="sent_status_${id}" class="text-xs font-medium text-accent shrink-0">0%</span>
+      `;
+      list.prepend(item);
+      return document.getElementById(`sent_status_${id}`);
+    }
+
+    function appendSentTextItem(text) {
+      document.getElementById('sentEmptyState').classList.add('hidden');
+      const list = document.getElementById('sentList');
+      list.classList.remove('hidden');
+
+      const item = document.createElement('div');
+      item.className = 'sub-surface rounded-xl p-3 flex items-center justify-between gap-3';
+      item.innerHTML = `
+        <div class="min-w-0 flex-1">
+          <div class="text-[11px] text-dim mb-0.5">ข้อความ · ${getCurrentTimeStr()}</div>
+          <div class="text-xs text-main truncate">${escapeHtml(text)}</div>
+        </div>
+        <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      `;
+      list.prepend(item);
+
+      sentStats.count++;
+      updateSentSummary();
+    }
+
+    function updateReceivedSummary() {
+      const el = document.getElementById('receivedSummaryText');
+      const btn = document.getElementById('clearReceivedBtn');
+      if (receivedStats.count === 0) {
+        el.textContent = 'ยังไม่มีไฟล์';
+        btn.classList.add('hidden');
+      } else {
+        const sizePart = receivedStats.bytes > 0 ? ` · ${formatBytes(receivedStats.bytes)}` : '';
+        el.textContent = `ได้รับ ${receivedStats.count} รายการ${sizePart}`;
+        btn.classList.remove('hidden');
+      }
+    }
+
+    function updateSentSummary() {
+      const el = document.getElementById('sentSummaryText');
+      const btn = document.getElementById('clearSentBtn');
+      if (sentStats.count === 0) {
+        el.textContent = 'ยังไม่มีรายการ';
+        btn.classList.add('hidden');
+      } else {
+        const sizePart = sentStats.bytes > 0 ? ` · ${formatBytes(sentStats.bytes)}` : '';
+        el.textContent = `ส่งแล้ว ${sentStats.count}${sizePart}`;
+        btn.classList.remove('hidden');
+      }
+    }
+
+    function clearReceivedList() {
+      document.getElementById('receivedList').innerHTML = '';
+      document.getElementById('receivedList').classList.add('hidden');
+      document.getElementById('receivedEmptyState').classList.remove('hidden');
+      receivedStats = { count: 0, bytes: 0 };
+      updateReceivedSummary();
+    }
+
+    function clearSentList() {
+      document.getElementById('sentList').innerHTML = '';
+      document.getElementById('sentList').classList.add('hidden');
+      document.getElementById('sentEmptyState').classList.remove('hidden');
+      sentStats = { count: 0, bytes: 0 };
+      updateSentSummary();
+    }
+
+    // ==========================================
+    // 9. หน้าต่างดูตัวอย่างไฟล์เต็มจอ (Preview Modal)
+    // ==========================================
+    function openPreviewModal(filename, mime, url) {
+      const modal = document.getElementById('previewModal');
+      const body = document.getElementById('previewBody');
+      const dlBtn = document.getElementById('previewDownloadBtn');
+
+      document.getElementById('previewFileName').textContent = filename;
+      dlBtn.href = url;
+      dlBtn.download = filename;
+
+      if (mime.startsWith('image/')) {
+        body.innerHTML = `<img src="${url}" class="max-h-[82vh] max-w-full rounded-xl object-contain shadow-2xl" alt="${escapeHtml(filename)}" />`;
+      } else if (mime.startsWith('video/')) {
+        body.innerHTML = `<video src="${url}" controls autoplay class="max-h-[82vh] max-w-full rounded-xl shadow-2xl"></video>`;
+      } else if (mime.startsWith('audio/')) {
+        body.innerHTML = `<div class="bg-[#13171c] border border-[#1f252d] p-6 rounded-2xl w-full max-w-md text-center"><p class="text-sm text-white mb-4">${escapeHtml(filename)}</p><audio src="${url}" controls autoplay class="w-full"></audio></div>`;
+      } else if (mime === 'application/pdf') {
+        body.innerHTML = `<iframe src="${url}" class="w-full h-[82vh] rounded-xl bg-white"></iframe>`;
+      } else {
+        body.innerHTML = `
+          <div class="bg-[#13171c] border border-[#1f252d] p-8 rounded-2xl text-center max-w-sm">
+            <p class="text-sm font-semibold text-white">${escapeHtml(filename)}</p>
+            <p class="text-xs text-slate-400 mt-1.5">ไม่รองรับการแสดงตัวอย่างไฟล์ประเภทนี้ กดปุ่ม "บันทึก" ด้านบนเพื่อเปิดในแอปอื่น</p>
+          </div>
+        `;
+      }
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closePreviewModal() {
+      const modal = document.getElementById('previewModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      document.getElementById('previewBody').innerHTML = '';
+    }
+
+    // ==========================================
+    // 10. Drag & Drop และ Clipboard Paste
+    // ==========================================
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-active');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('drag-active');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-active');
+      handleFiles(e.dataTransfer.files);
+    });
+
     window.addEventListener('paste', (e) => {
       if (!activeConn) return;
       if (document.activeElement === document.getElementById('textMessageInput')) return;
-
-      const items = e.clipboardData?.files;
-      if (items && items.length > 0) {
-        handleFiles(items);
+      const files = e.clipboardData?.files;
+      if (files && files.length > 0) {
+        handleFiles(files);
         showToast('กำลังส่งไฟล์จากคลิปบอร์ด...');
       }
     });
 
     // ==========================================
-    // 7. การจัดการ UI รายการและตั้งค่า
+    // 11. การจัดการหน้าต่างตั้งค่า, โฟลเดอร์, และ Modals
     // ==========================================
-    function appendFileLog(id, name, size, statusText) {
-      document.getElementById('emptyTransferMsg')?.remove();
-      const list = document.getElementById('transferList');
-      const item = document.createElement('div');
-      item.className = 'flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50';
-      item.innerHTML = `
-        <div class="min-w-0 pr-3">
-          <div class="text-sm font-medium text-slate-900 truncate">${escapeHtml(name)}</div>
-          <div class="text-xs text-slate-500">${formatBytes(size)}</div>
-        </div>
-        <span id="status_${id}" class="text-xs font-medium text-slate-600 whitespace-nowrap">${statusText}</span>
-      `;
-      list.prepend(item);
-      return document.getElementById(`status_${id}`);
-    }
-
-    function appendTextLog(text, direction) {
-      document.getElementById('emptyTransferMsg')?.remove();
-      const list = document.getElementById('transferList');
-      const item = document.createElement('div');
-      item.className = 'p-3 rounded-lg border border-slate-200 bg-slate-50 flex items-start justify-between gap-3';
-      item.innerHTML = `
-        <div class="min-w-0 flex-1">
-          <div class="text-[11px] text-slate-400 mb-0.5">${direction}</div>
-          <div class="text-sm text-slate-900 break-words">${escapeHtml(text)}</div>
-        </div>
-        <button onclick="navigator.clipboard.writeText(this.dataset.text); this.textContent='คัดลอกแล้ว'"
-          data-text="${escapeHtml(text)}"
-          class="text-xs font-medium border border-slate-300 bg-white px-2.5 py-1 rounded hover:bg-slate-100 whitespace-nowrap">
-          คัดลอก
-        </button>
-      `;
-      list.prepend(item);
-    }
-
-    function clearTransferLog() {
-      document.getElementById('transferList').innerHTML =
-        '<p id="emptyTransferMsg" class="text-xs text-slate-400 py-6 text-center">ยังไม่มีรายการรับหรือส่ง</p>';
-    }
-
-    const dropZone = document.getElementById('dropZone');
-    dropZone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      dropZone.classList.add('border-slate-900', 'bg-slate-100');
-    });
-    dropZone.addEventListener('dragleave', () => {
-      dropZone.classList.remove('border-slate-900', 'bg-slate-100');
-    });
-    dropZone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dropZone.classList.remove('border-slate-900', 'bg-slate-100');
-      handleFiles(e.dataTransfer.files);
-    });
-
     function toggleSettings(show) {
       const modal = document.getElementById('settingsModal');
       if (show) {
         document.getElementById('deviceNameInput').value = myDeviceName;
         renderTrustedList();
+        syncSettingsUI();
+        applyTheme();
         modal.classList.remove('hidden');
         modal.classList.add('flex');
       } else {
@@ -771,11 +1740,62 @@
       }
     }
 
+    function toggleQrModal(show) {
+      const modal = document.getElementById('qrModal');
+      modal.classList.toggle('hidden', !show);
+      modal.classList.toggle('flex', show);
+    }
+
+    function toggleHelpModal(show) {
+      const modal = document.getElementById('helpModal');
+      modal.classList.toggle('hidden', !show);
+      modal.classList.toggle('flex', show);
+    }
+
+    async function pickSaveDirectory() {
+      if (!window.showDirectoryPicker) {
+        showToast('เบราว์เซอร์บนอุปกรณ์นี้จะบันทึกไฟล์ลงโฟลเดอร์ดาวน์โหลดให้อัตโนมัติ');
+        return;
+      }
+      try {
+        savedDirectoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        document.getElementById('saveFolderLabel').textContent = savedDirectoryHandle.name;
+        showToast(`ตั้งค่าบันทึกไฟล์ลงโฟลเดอร์ ${savedDirectoryHandle.name}`);
+      } catch (e) {}
+    }
+
+    function toggleSettingSwitch(key) {
+      appSettings[key] = !appSettings[key];
+      localStorage.setItem('dp_settings', JSON.stringify(appSettings));
+      syncSettingsUI();
+    }
+
+    function syncSettingsUI() {
+      setSwitchVisual('toggleAutoPreview', appSettings.autoPreview);
+      setSwitchVisual('toggleAutoCopy', appSettings.autoCopyText);
+      setSwitchVisual('toggleSoundAlert', appSettings.soundAlert);
+    }
+
+    function setSwitchVisual(id, enabled) {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      const dot = btn.querySelector('.dot');
+      if (enabled) {
+        btn.style.backgroundColor = 'var(--switch-on)';
+        dot.classList.remove('translate-x-0.5');
+        dot.classList.add('translate-x-5');
+      } else {
+        btn.style.backgroundColor = 'var(--switch-off)';
+        dot.classList.add('translate-x-0.5');
+        dot.classList.remove('translate-x-5');
+      }
+    }
+
     function saveDeviceName() {
       const val = document.getElementById('deviceNameInput').value.trim();
-      if (!val) return;
+      if (!val || val === myDeviceName) return;
       myDeviceName = val;
-      localStorage.setItem('ld_device_name', myDeviceName);
+      localStorage.setItem('dp_device_name', myDeviceName);
       updateDeviceNameUI();
       if (myPeerId && wifiRoomKey) {
         db.ref(`wifi_rooms/${wifiRoomKey}/${myPeerId}/deviceName`).set(myDeviceName);
@@ -783,28 +1803,30 @@
       if (myCode) {
         db.ref(`codes/${myCode}/deviceName`).set(myDeviceName);
       }
-      toggleSettings(false);
       showToast('บันทึกชื่อเครื่องแล้ว');
     }
 
     function updateDeviceNameUI() {
-      document.getElementById('headerDeviceName').textContent = myDeviceName;
+      document.getElementById('displayDeviceName').textContent = myDeviceName;
+      if (myPeerId) {
+        document.getElementById('headerSubtitle').textContent = myDeviceName;
+      }
     }
 
     function getTrustedDevices() {
-      return JSON.parse(localStorage.getItem('ld_trusted') || '{}');
+      return JSON.parse(localStorage.getItem('dp_trusted') || '{}');
     }
 
     function saveTrustedDevice(token, name) {
       const trusted = getTrustedDevices();
       trusted[token] = name;
-      localStorage.setItem('ld_trusted', JSON.stringify(trusted));
+      localStorage.setItem('dp_trusted', JSON.stringify(trusted));
     }
 
     function removeTrustedDevice(token) {
       const trusted = getTrustedDevices();
       delete trusted[token];
-      localStorage.setItem('ld_trusted', JSON.stringify(trusted));
+      localStorage.setItem('dp_trusted', JSON.stringify(trusted));
       renderTrustedList();
     }
 
@@ -813,13 +1835,13 @@
       const entries = Object.entries(trusted);
       const el = document.getElementById('trustedList');
       if (entries.length === 0) {
-        el.innerHTML = '<p class="text-xs text-slate-400">ยังไม่มีเครื่องที่บันทึกไว้</p>';
+        el.innerHTML = '<p class="text-[11px] text-dim">ยังไม่มี · ตอนมีเครื่องส่งมา กด "จำไว้" แล้วครั้งหน้าไม่ต้องใส่รหัส</p>';
         return;
       }
       el.innerHTML = entries.map(([token, name]) => `
-        <div class="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
-          <span class="text-xs font-medium text-slate-800">${escapeHtml(name)}</span>
-          <button onclick="removeTrustedDevice('${token}')" class="text-xs text-rose-600 hover:underline">ลบออก</button>
+        <div class="flex items-center justify-between sub-surface px-3 py-2 rounded-xl">
+          <span class="text-xs font-medium text-main">${escapeHtml(name)}</span>
+          <button onclick="removeTrustedDevice('${token}')" class="text-xs text-rose-500 hover:underline">ลบออก</button>
         </div>
       `).join('');
     }
@@ -829,7 +1851,7 @@
       const k = 1024;
       const sizes = ['B', 'KB', 'MB', 'GB'];
       const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(0)) + ' ' + sizes[i];
     }
 
     function escapeHtml(str) {
