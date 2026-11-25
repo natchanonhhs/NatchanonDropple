@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Dropple — ส่งไฟล์และข้อความตรงระหว่างเครื่อง</title>
-  <link rel="icon" type="image/png" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
-  <link rel="shortcut icon" type="image/png" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
-  <link rel="apple-touch-icon" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
+  <link id="faviconLink" rel="icon" type="image/png" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
+  <link id="shortcutIconLink" rel="shortcut icon" type="image/png" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
+  <link id="appleTouchIconLink" rel="apple-touch-icon" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -14,6 +14,47 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>
+    // สร้างไอคอน PNG Data URL ให้ Safari แสดงบนแท็บทันทีและโหลดภาพจากลิงก์มาอัปเดตทับ
+    (function() {
+      function applySafariIcons(dataUrl) {
+        ['faviconLink', 'shortcutIconLink', 'appleTouchIconLink'].forEach(function(id) {
+          const el = document.getElementById(id);
+          if (el) el.href = dataUrl;
+        });
+      }
+
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.roundRect(0, 0, 128, 128, 28);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 76px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('N', 64, 68);
+        applySafariIcons(canvas.toDataURL('image/png'));
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function() {
+          try {
+            const imgCanvas = document.createElement('canvas');
+            imgCanvas.width = 128;
+            imgCanvas.height = 128;
+            const imgCtx = imgCanvas.getContext('2d');
+            imgCtx.drawImage(img, 0, 0, 128, 128);
+            applySafariIcons(imgCanvas.toDataURL('image/png'));
+          } catch (e) {}
+        };
+        img.src = 'https://i.postimg.cc/NjNbnZpZ/N.png';
+      } catch (e) {}
+    })();
+
     // ตั้งค่าธีมล่วงหน้าก่อนเรนเดอร์เพื่อไม่ให้หน้าจอกระพริบ
     (function() {
       const savedTheme = localStorage.getItem('dp_theme') || 'system';
@@ -709,11 +750,16 @@
     let wifiRoomKey = null;
     let activeConn = null;
     let activePeerInfo = null;
+    let lastConnectedPeer = null;
     let pendingIncomingConn = null;
     let pendingRequesterInfo = null;
     let countdownTimer = null;
     let savedDirectoryHandle = null;
     let pendingClipboardText = null;
+    let sharedAudioCtx = null;
+    let wakeLockSentinel = null;
+    let lastResumeCheck = 0;
+    let isAutoReconnecting = false;
 
     let receivedStats = { count: 0, bytes: 0 };
     let sentStats = { count: 0, bytes: 0 };
@@ -751,7 +797,7 @@
         sunIcon.classList.toggle('hidden', themePreference !== 'light');
         moonIcon.classList.toggle('hidden', themePreference !== 'dark');
         sysIcon.classList.toggle('hidden', themePreference !== 'system');
-        label.textContent = themePreference === 'light' ? 'สีขาว' : themePreference === 'dark' ? 'สีดำ' : 'ตามระบบ';
+        label.textContent = themePreference === 'light' ? 'สีขาว' : themePreference === 'dark' ? 'สีดำ' : 'เริ่มต้น';
       }
 
       // อัปเดตปุ่มเลือกในหน้าต่างตั้งค่า
@@ -838,35 +884,134 @@
       }, 3000);
     }
 
-    function playNotificationSound() {
-      if (!appSettings.soundAlert) return;
+    // ปลดล็อกระบบเสียงสำหรับ Safari บน iPadOS / iOS ทันทีที่ผู้ใช้แตะหน้าจอครั้งแรก
+    function unlockAudioContext() {
       try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        const ctx = new AudioCtx();
-        const now = ctx.currentTime;
-
-        const osc1 = ctx.createOscillator();
-        const gain1 = ctx.createGain();
-        osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(587.33, now);
-        osc1.frequency.setValueAtTime(880, now + 0.09);
-        gain1.gain.setValueAtTime(0.08, now);
-        gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-
-        osc1.connect(gain1);
-        gain1.connect(ctx.destination);
-        osc1.start(now);
-        osc1.stop(now + 0.35);
+        if (!AudioCtx) return;
+        if (!sharedAudioCtx) {
+          sharedAudioCtx = new AudioCtx();
+        }
+        if (sharedAudioCtx.state === 'suspended') {
+          sharedAudioCtx.resume().catch(() => {});
+        }
+        const buffer = sharedAudioCtx.createBuffer(1, 1, 22050);
+        const source = sharedAudioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(sharedAudioCtx.destination);
+        source.start(0);
       } catch (e) {}
     }
 
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && pendingClipboardText && appSettings.autoCopyText) {
+    ['touchstart', 'pointerdown', 'click', 'keydown'].forEach(evt => {
+      window.addEventListener(evt, unlockAudioContext, { passive: true });
+    });
+
+    async function playNotificationSound(mode = 'receive') {
+      if (!appSettings.soundAlert) return;
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        if (!sharedAudioCtx) {
+          sharedAudioCtx = new AudioCtx();
+        }
+        if (sharedAudioCtx.state === 'suspended') {
+          await sharedAudioCtx.resume();
+        }
+
+        const now = sharedAudioCtx.currentTime;
+        const osc = sharedAudioCtx.createOscillator();
+        const gain = sharedAudioCtx.createGain();
+        osc.type = 'sine';
+
+        if (mode === 'send') {
+          osc.frequency.setValueAtTime(523.25, now);
+          osc.frequency.setValueAtTime(659.25, now + 0.08);
+        } else {
+          osc.frequency.setValueAtTime(587.33, now);
+          osc.frequency.setValueAtTime(880, now + 0.09);
+        }
+
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.16, now + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.36);
+
+        osc.connect(gain);
+        gain.connect(sharedAudioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.37);
+      } catch (e) {}
+    }
+
+    // ป้องกันหน้าจอพักเองขณะเปิดหน้าเว็บค้างไว้
+    async function requestScreenWakeLock() {
+      try {
+        if ('wakeLock' in navigator && !document.hidden) {
+          wakeLockSentinel = await navigator.wakeLock.request('screen');
+        }
+      } catch (e) {}
+    }
+
+    // กู้คืนการเชื่อมต่อทันทีเมื่อสลับแท็บหรือกลับเข้าแอป Safari
+    function handleResumeFromBackground() {
+      if (document.hidden) return;
+
+      const now = Date.now();
+      if (now - lastResumeCheck < 800) return;
+      lastResumeCheck = now;
+
+      requestScreenWakeLock();
+
+      if (pendingClipboardText && appSettings.autoCopyText) {
         navigator.clipboard?.writeText(pendingClipboardText).catch(() => {});
         showToast('คัดลอกข้อความที่ได้รับลงคลิปบอร์ดแล้ว');
         pendingClipboardText = null;
       }
+
+      if (!peer || peer.destroyed) {
+        setConnectionStatus(false);
+        initPeerEngine(true);
+        return;
+      }
+
+      if (peer.disconnected) {
+        setConnectionStatus(false);
+        try {
+          peer.reconnect();
+        } catch (e) {
+          initPeerEngine(true);
+        }
+      } else if (peer.open) {
+        setConnectionStatus(true);
+        syncFirebasePresence(true);
+      }
+
+      // ถ้าเคยเชื่อมต่อกับอีกเครื่องค้างไว้ก่อนสลับแอป ให้ต่อกลับให้อัตโนมัติ
+      if (activeConn && !activeConn.open) {
+        resetSessionUI(true);
+      }
+      if (!activeConn && lastConnectedPeer && lastConnectedPeer.isInitiator && peer && peer.open) {
+        isAutoReconnecting = true;
+        initiateConnection(lastConnectedPeer.peerId, lastConnectedPeer.name, lastConnectedPeer.viaCode, true);
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        handleResumeFromBackground();
+      }
     });
+    window.addEventListener('focus', handleResumeFromBackground);
+    window.addEventListener('pageshow', handleResumeFromBackground);
+
+    // ส่งสัญญาณประคองสายทุก 4 วินาทีไม่ให้ WebRTC หลุดง่าย
+    setInterval(() => {
+      if (activeConn && activeConn.open) {
+        try {
+          activeConn.send({ type: 'ping' });
+        } catch (e) {}
+      }
+    }, 4000);
 
     // ==========================================
     // 3. ป้องกันเปิดซ้ำหลายแท็บ
@@ -897,6 +1042,14 @@
       updateDeviceNameUI();
       syncSettingsUI();
       setupCodeBoxes();
+      requestScreenWakeLock();
+      initPeerEngine(false);
+    }
+
+    function initPeerEngine(isRecovery = false) {
+      if (peer && !peer.destroyed) {
+        try { peer.destroy(); } catch (e) {}
+      }
 
       peer = new Peer({
         config: {
@@ -910,9 +1063,14 @@
       peer.on('open', async (id) => {
         myPeerId = id;
         setConnectionStatus(true);
-        await registerPairingCode();
-        await joinWifiRoom();
-        checkUrlCodeParam();
+        await syncFirebasePresence(isRecovery);
+
+        if (!isRecovery) {
+          checkUrlCodeParam();
+        } else if (!activeConn && lastConnectedPeer && lastConnectedPeer.isInitiator) {
+          isAutoReconnecting = true;
+          initiateConnection(lastConnectedPeer.peerId, lastConnectedPeer.name, lastConnectedPeer.viaCode, true);
+        }
       });
 
       peer.on('connection', (conn) => {
@@ -921,13 +1079,47 @@
 
       peer.on('disconnected', () => {
         setConnectionStatus(false);
-        peer.reconnect();
+        if (!document.hidden) {
+          try { peer.reconnect(); } catch (e) {}
+        }
+      });
+
+      peer.on('close', () => {
+        setConnectionStatus(false);
       });
 
       peer.on('error', (err) => {
         console.error('PeerJS Error:', err);
+        if (document.hidden) return;
+
+        if (err.type === 'peer-unavailable') {
+          if (isAutoReconnecting) {
+            isAutoReconnecting = false;
+            lastConnectedPeer = null;
+            return;
+          }
+          showToast('ไม่พบเครื่องปลายทาง หรือเครื่องนั้นปิดหน้าเว็บไปแล้ว', true);
+          return;
+        }
+
+        if (['network', 'disconnected', 'server-error', 'socket-closed', 'socket-error'].includes(err.type)) {
+          setConnectionStatus(false);
+          setTimeout(() => {
+            if (!document.hidden && peer && peer.disconnected && !peer.destroyed) {
+              try { peer.reconnect(); } catch (e) {}
+            }
+          }, 1200);
+          return;
+        }
+
         showToast('การเชื่อมต่อขัดข้อง: ' + err.type, true);
       });
+    }
+
+    async function syncFirebasePresence(keepExistingCode = false) {
+      if (!myPeerId) return;
+      await registerPairingCode(keepExistingCode);
+      await joinWifiRoom();
     }
 
     function setConnectionStatus(online) {
@@ -950,11 +1142,14 @@
       return res;
     }
 
-    async function registerPairingCode() {
-      if (myCode) {
-        await db.ref(`codes/${myCode}`).remove();
+    async function registerPairingCode(keepExistingCode = false) {
+      if (!keepExistingCode || !myCode) {
+        if (myCode) {
+          await db.ref(`codes/${myCode}`).remove().catch(() => {});
+        }
+        myCode = generateRandomCode();
       }
-      myCode = generateRandomCode();
+
       document.getElementById('myPairingCode').textContent = myCode;
       document.getElementById('modalPairingCode').textContent = myCode;
       document.getElementById('inlineCodeHint').textContent = myCode;
@@ -992,7 +1187,7 @@
 
     function regenerateCode() {
       if (myPeerId) {
-        registerPairingCode();
+        registerPairingCode(false);
         showToast('เปลี่ยนรหัสรับไฟล์ใหม่แล้ว');
       }
     }
@@ -1006,9 +1201,11 @@
 
     async function joinWifiRoom() {
       try {
-        const res = await fetch('https://api.ipify.org?format=json');
-        const data = await res.json();
-        wifiRoomKey = data.ip.replace(/[.:]/g, '_');
+        if (!wifiRoomKey) {
+          const res = await fetch('https://api.ipify.org?format=json');
+          const data = await res.json();
+          wifiRoomKey = data.ip.replace(/[.:]/g, '_');
+        }
 
         const myRoomRef = db.ref(`wifi_rooms/${wifiRoomKey}/${myPeerId}`);
         await myRoomRef.set({
@@ -1017,6 +1214,7 @@
         });
         myRoomRef.onDisconnect().remove();
 
+        db.ref(`wifi_rooms/${wifiRoomKey}`).off('value');
         db.ref(`wifi_rooms/${wifiRoomKey}`).on('value', (snapshot) => {
           const devices = snapshot.val() || {};
           renderNearbyDevices(devices);
@@ -1115,7 +1313,7 @@
           showToast('ไม่พบรหัสนี้ หรือเครื่องปลายทางปิดหน้าเว็บไปแล้ว', true);
           return;
         }
-        initiateConnection(target.peerId, target.deviceName, true);
+        initiateConnection(target.peerId, target.deviceName, true, false, code);
       } catch (err) {
         showToast('ไม่สามารถอ่านข้อมูลจาก Firebase ได้ กรุณาเช็ก Rules', true);
       }
@@ -1133,11 +1331,15 @@
       }
     }
 
-    function initiateConnection(targetPeerId, targetName, viaCode = false) {
-      if (activeConn) activeConn.close();
-      showToast(`กำลังเชื่อมต่อกับ ${targetName}...`);
+    function initiateConnection(targetPeerId, targetName, viaCode = false, silent = false, targetCode = null) {
+      if (activeConn) {
+        try { activeConn.close(); } catch (e) {}
+      }
+      if (!silent) {
+        showToast(`กำลังเชื่อมต่อกับ ${targetName}...`);
+      }
 
-      const conn = peer.connect(targetPeerId, { reliable: true });
+      const conn = peer.connect(targetPeerId);
       conn.on('open', () => {
         conn.send({
           type: 'handshake-hello',
@@ -1148,13 +1350,28 @@
       });
 
       conn.on('data', (data) => {
+        if (data.type === 'ping') {
+          try { conn.send({ type: 'pong' }); } catch (e) {}
+          return;
+        }
+        if (data.type === 'pong') return;
+
         if (data.type === 'handshake-accepted') {
-          activateSession(conn, {
+          isAutoReconnecting = false;
+          const peerMeta = {
+            peerId: targetPeerId,
             name: data.deviceName || targetName,
-            token: data.token || null
-          });
-          switchTab('send');
+            token: data.token || null,
+            viaCode,
+            targetCode: targetCode || (lastConnectedPeer && lastConnectedPeer.targetCode) || null,
+            isInitiator: true
+          };
+          lastConnectedPeer = peerMeta;
+          activateSession(conn, peerMeta);
+          if (!silent) switchTab('send');
         } else if (data.type === 'handshake-rejected') {
+          isAutoReconnecting = false;
+          lastConnectedPeer = null;
           showToast('เครื่องปลายทางปฏิเสธการเชื่อมต่อ', true);
           conn.close();
         } else {
@@ -1162,19 +1379,44 @@
         }
       });
 
-      conn.on('close', () => resetSessionUI());
+      conn.on('close', () => {
+        if (activeConn === conn) {
+          resetSessionUI(true);
+        }
+      });
     }
 
     function setupIncomingConnection(conn) {
       conn.on('data', (data) => {
+        if (data.type === 'ping') {
+          try { conn.send({ type: 'pong' }); } catch (e) {}
+          return;
+        }
+        if (data.type === 'pong') return;
+
         if (data.type === 'handshake-hello') {
           const trusted = getTrustedDevices();
           const isTrusted = Boolean(trusted[data.token]);
+          const isSameSession = Boolean(
+            (activePeerInfo && data.token && activePeerInfo.token === data.token) ||
+            (lastConnectedPeer && data.token && lastConnectedPeer.token === data.token)
+          );
 
-          if (isTrusted || data.viaCode) {
+          if (isTrusted || data.viaCode || isSameSession) {
+            if (activeConn && activeConn !== conn) {
+              try { activeConn.close(); } catch (e) {}
+            }
             conn.send({ type: 'handshake-accepted', deviceName: myDeviceName, token: myToken });
-            activateSession(conn, { name: data.deviceName, token: data.token });
-            if (!isTrusted) {
+            const peerMeta = {
+              peerId: conn.peer,
+              name: data.deviceName,
+              token: data.token,
+              viaCode: data.viaCode,
+              isInitiator: false
+            };
+            lastConnectedPeer = peerMeta;
+            activateSession(conn, peerMeta);
+            if (!isTrusted && !isSameSession) {
               showRememberBar(data.deviceName, data.token);
             }
           } else {
@@ -1187,7 +1429,11 @@
         }
       });
 
-      conn.on('close', () => resetSessionUI());
+      conn.on('close', () => {
+        if (activeConn === conn) {
+          resetSessionUI(true);
+        }
+      });
     }
 
     function showRequestModal(name) {
@@ -1220,7 +1466,15 @@
           saveTrustedDevice(pendingRequesterInfo.token, pendingRequesterInfo.name);
         }
         pendingIncomingConn.send({ type: 'handshake-accepted', deviceName: myDeviceName, token: myToken });
-        activateSession(pendingIncomingConn, pendingRequesterInfo);
+        const peerMeta = {
+          peerId: pendingIncomingConn.peer,
+          name: pendingRequesterInfo.name,
+          token: pendingRequesterInfo.token,
+          viaCode: false,
+          isInitiator: false
+        };
+        lastConnectedPeer = peerMeta;
+        activateSession(pendingIncomingConn, peerMeta);
       } else {
         pendingIncomingConn.send({ type: 'handshake-rejected' });
         pendingIncomingConn.close();
@@ -1248,13 +1502,19 @@
     }
 
     function disconnectPeer() {
-      if (activeConn) activeConn.close();
-      resetSessionUI();
+      lastConnectedPeer = null;
+      if (activeConn) {
+        try { activeConn.close(); } catch (e) {}
+      }
+      resetSessionUI(false);
     }
 
-    function resetSessionUI() {
+    function resetSessionUI(keepLastPeer = false) {
       activeConn = null;
       activePeerInfo = null;
+      if (!keepLastPeer) {
+        lastConnectedPeer = null;
+      }
       dismissRememberBar();
       clearCodeBoxes();
 
@@ -1324,6 +1584,38 @@
     // ==========================================
     // 7. การส่งและรับไฟล์ (16KB Stream) + ข้อความ
     // ==========================================
+    function resolveMimeType(filename, rawMime) {
+      if (rawMime && rawMime !== 'application/octet-stream') return rawMime;
+      const ext = (filename.split('.').pop() || '').toLowerCase();
+      const map = {
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+        gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+        heic: 'image/heic', heif: 'image/heif', bmp: 'image/bmp',
+        mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
+        mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg',
+        pdf: 'application/pdf', txt: 'text/plain'
+      };
+      return map[ext] || rawMime || 'application/octet-stream';
+    }
+
+    function normalizeChunkToUint8Array(rawChunk) {
+      if (!rawChunk) return new Uint8Array(0);
+      if (rawChunk instanceof Uint8Array) return rawChunk;
+      if (rawChunk instanceof ArrayBuffer) return new Uint8Array(rawChunk);
+      if (ArrayBuffer.isView(rawChunk)) {
+        return new Uint8Array(rawChunk.buffer, rawChunk.byteOffset, rawChunk.byteLength);
+      }
+      if (Array.isArray(rawChunk)) return new Uint8Array(rawChunk);
+      if (typeof rawChunk === 'object') {
+        if (Array.isArray(rawChunk.data)) return new Uint8Array(rawChunk.data);
+        const values = Object.values(rawChunk);
+        if (values.length > 0 && typeof values[0] === 'number') {
+          return new Uint8Array(values);
+        }
+      }
+      return new Uint8Array(0);
+    }
+
     async function pasteFromClipboard() {
       try {
         const text = await navigator.clipboard.readText();
@@ -1344,6 +1636,7 @@
       if (!text || !activeConn) return;
 
       activeConn.send({ type: 'text-message', text });
+      playNotificationSound('send');
       appendSentTextItem(text);
       input.value = '';
     }
@@ -1354,6 +1647,7 @@
       for (const file of fileList) {
         const fileId = crypto.randomUUID();
         const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+        const mime = resolveMimeType(file.name, file.type);
         const statusEl = appendSentFileItem(fileId, file.name, file.size);
 
         activeConn.send({
@@ -1361,7 +1655,7 @@
           fileId,
           name: file.name,
           size: file.size,
-          mime: file.type || 'application/octet-stream',
+          mime,
           totalChunks
         });
 
@@ -1373,7 +1667,8 @@
 
           const start = i * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, file.size);
-          const chunk = await file.slice(start, end).arrayBuffer();
+          const buffer = await file.slice(start, end).arrayBuffer();
+          const chunk = new Uint8Array(buffer);
 
           activeConn.send({
             type: 'file-chunk',
@@ -1389,6 +1684,7 @@
         }
 
         activeConn.send({ type: 'file-end', fileId });
+        playNotificationSound('send');
         statusEl.innerHTML = `
           <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
@@ -1404,7 +1700,7 @@
 
     async function handleIncomingPayload(data) {
       if (data.type === 'text-message') {
-        playNotificationSound();
+        playNotificationSound('receive');
         appendReceivedTextItem(data.text);
 
         if (appSettings.autoCopyText) {
@@ -1416,9 +1712,10 @@
         }
         showToast('ได้รับข้อความใหม่');
       } else if (data.type === 'file-start') {
+        const resolvedMime = resolveMimeType(data.name, data.mime);
         const statusEl = appendReceivedFileSkeleton(data.fileId, data.name, data.size);
         incomingFiles[data.fileId] = {
-          meta: data,
+          meta: { ...data, mime: resolvedMime },
           chunks: new Array(data.totalChunks),
           receivedCount: 0,
           statusEl
@@ -1426,7 +1723,7 @@
       } else if (data.type === 'file-chunk') {
         const record = incomingFiles[data.fileId];
         if (!record) return;
-        record.chunks[data.index] = data.chunk;
+        record.chunks[data.index] = normalizeChunkToUint8Array(data.chunk);
         record.receivedCount++;
         if (record.receivedCount % 12 === 0 || record.receivedCount === record.meta.totalChunks) {
           const pct = Math.round((record.receivedCount / record.meta.totalChunks) * 100);
@@ -1436,8 +1733,9 @@
         const record = incomingFiles[data.fileId];
         if (!record) return;
 
-        playNotificationSound();
-        const blob = new Blob(record.chunks, { type: record.meta.mime });
+        playNotificationSound('receive');
+        const safeChunks = record.chunks.map(c => c || new Uint8Array(0));
+        const blob = new Blob(safeChunks, { type: record.meta.mime });
         const blobUrl = URL.createObjectURL(blob);
 
         if (savedDirectoryHandle) {
@@ -1524,7 +1822,19 @@
 
       const thumbEl = document.getElementById(`recv_thumb_${id}`);
       if (thumbEl && meta.mime.startsWith('image/')) {
-        thumbEl.innerHTML = `<img src="${blobUrl}" class="w-full h-full object-cover" alt="" />`;
+        const img = document.createElement('img');
+        img.src = blobUrl;
+        img.className = 'w-full h-full object-cover';
+        img.alt = meta.name;
+        img.onerror = () => {
+          thumbEl.innerHTML = `
+            <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          `;
+        };
+        thumbEl.innerHTML = '';
+        thumbEl.appendChild(img);
       }
 
       statusEl.innerHTML = `
@@ -1670,7 +1980,7 @@
       if (mime.startsWith('image/')) {
         body.innerHTML = `<img src="${url}" class="max-h-[82vh] max-w-full rounded-xl object-contain shadow-2xl" alt="${escapeHtml(filename)}" />`;
       } else if (mime.startsWith('video/')) {
-        body.innerHTML = `<video src="${url}" controls autoplay class="max-h-[82vh] max-w-full rounded-xl shadow-2xl"></video>`;
+        body.innerHTML = `<video src="${url}" controls autoplay playsinline class="max-h-[82vh] max-w-full rounded-xl shadow-2xl"></video>`;
       } else if (mime.startsWith('audio/')) {
         body.innerHTML = `<div class="bg-[#13171c] border border-[#1f252d] p-6 rounded-2xl w-full max-w-md text-center"><p class="text-sm text-white mb-4">${escapeHtml(filename)}</p><audio src="${url}" controls autoplay class="w-full"></audio></div>`;
       } else if (mime === 'application/pdf') {
