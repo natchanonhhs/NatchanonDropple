@@ -183,6 +183,35 @@
       background-color: var(--bg-sub);
       border: 1px solid var(--border-main);
     }
+
+    /* บังคับขนาด QR Code ให้แสดงผลสมบูรณ์บน Safari และทุกเบราว์เซอร์ */
+    #qrcode {
+      width: 152px;
+      height: 152px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #qrcode canvas,
+    #qrcode img {
+      width: 152px !important;
+      height: 152px !important;
+      display: block !important;
+    }
+    #modalQrcode {
+      width: 180px;
+      height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #modalQrcode canvas,
+    #modalQrcode img {
+      width: 180px !important;
+      height: 180px !important;
+      display: block !important;
+    }
+
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.35); border-radius: 999px; }
@@ -238,7 +267,7 @@
         </svg>
       </button>
       <h3 class="text-sm font-semibold text-main">สแกนจากมือถือ</h3>
-      <div class="mt-4 inline-block bg-white p-3 rounded-xl border border-slate-200">
+      <div class="mt-4 inline-flex items-center justify-center bg-white p-3 rounded-xl border border-slate-200">
         <div id="modalQrcode"></div>
       </div>
       <div id="modalPairingCode" class="mt-3 text-2xl font-bold tracking-[0.28em] text-main pl-1">------</div>
@@ -260,7 +289,7 @@
         <li>เปิดหน้าเว็บนี้บนทั้งสองเครื่องที่ต้องการส่งข้อมูลหากัน</li>
         <li>สแกน QR Code หรือนำรหัส 6 หลักของเครื่องรับไปกรอกในแท็บ <strong class="text-accent">ส่งไฟล์</strong> ของอีกเครื่อง</li>
         <li>เลือกไฟล์ รูปภาพ วิดีโอ เอกสาร หรือพิมพ์ข้อความเพื่อส่งระหว่างเครื่องได้ทันที</li>
-        <li>ข้อมูลทุกประเภทจะถูกลบออกจากระบบทันทีที่ส่งถึงปลายทาง และล้างทั้งหมดเมื่อรีเฟรชหรือปิดหน้าเว็บ</li>
+        <li>ไฟล์และข้อความจะถูกลบออกจากฐานข้อมูลทันทีที่รับเสร็จ และล้างไฟล์ตกค้างอัตโนมัติเมื่อปิดหน้าเว็บ</li>
       </ol>
       <button onclick="toggleHelpModal(false)" class="mt-5 w-full teal-btn text-xs font-medium py-2.5 rounded-xl transition">
         เริ่มใช้งาน
@@ -471,7 +500,7 @@
             </div>
             <div>
               <h2 class="text-sm font-semibold text-main">รอรับไฟล์อยู่นะ</h2>
-              <p class="text-xs text-dim">เปิดหน้านี้ค้างไว้ได้เลย · ล้างข้อมูลอัตโนมัติเมื่อออก</p>
+              <p class="text-xs text-dim">เปิดหน้านี้ค้างไว้ได้เลย · ลบไฟล์จากเซิร์ฟเวอร์อัตโนมัติหลังรับเสร็จ</p>
             </div>
           </div>
 
@@ -499,7 +528,7 @@
           <h3 class="text-xs font-medium text-dim">สแกนจากมือถือ</h3>
 
           <div class="mt-4 flex flex-col items-center">
-            <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center">
               <div id="qrcode"></div>
             </div>
 
@@ -696,7 +725,7 @@
     // 2. ตัวแปรระบบ, ธีม และโลโก้
     // ==========================================
     const CHUNK_SIZE = 65536; // 64KB ต่อก้อน ส่งไฟล์ทุกประเภทและไฟล์ขนาดใหญ่ได้เสถียร 100%
-    const STALE_ITEM_TTL_MS = 3 * 60 * 1000; // ล้างรายการตกค้างเกิน 3 นาทีอัตโนมัติ
+    const STALE_FILE_TTL_MS = 5 * 60 * 1000; // ล้างเฉพาะไฟล์ตกค้างเกิน 5 นาที
     const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const LOGO_LIGHT_URL = 'https://i.postimg.cc/GpWPwRG0/N.png';
     const LOGO_DARK_URL = 'https://i.postimg.cc/VvBWWhJq/N.png';
@@ -705,7 +734,7 @@
     const systemDarkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 
     let currentAuthUid = null;
-    let myCode = null;
+    let myCode = localStorage.getItem('dp_pairing_code') || null;
     let wifiRoomKey = null;
     let isSessionConnected = false;
     let activePeerInfo = null;
@@ -724,8 +753,6 @@
     let sentStats = { count: 0, bytes: 0 };
     const incomingTransfers = {};
     const processedTransfers = new Set();
-    const activeOutgoingRefs = new Set();
-    const createdObjectUrls = new Set();
 
     const myToken = localStorage.getItem('dp_token') || crypto.randomUUID();
     localStorage.setItem('dp_token', myToken);
@@ -989,37 +1016,9 @@
     window.addEventListener('pageshow', handleResumeFromBackground);
 
     // ==========================================
-    // 3. ระบบล้างข้อมูลอัตโนมัติเมื่อรีเฟรชหรือออกจากหน้าเว็บ (Zero Persistence)
+    // 3. ป้องกันเปิดซ้ำหลายแท็บ
     // ==========================================
-    function purgeAllSessionDataOnExit() {
-      try {
-        if (myCode) {
-          db.ref(`inbox/${myCode}`).remove().catch(() => {});
-          db.ref(`signals/${myCode}`).remove().catch(() => {});
-          db.ref(`codes/${myCode}`).remove().catch(() => {});
-        }
-        if (wifiRoomKey && myToken) {
-          db.ref(`wifi_rooms/${wifiRoomKey}/${myToken}`).remove().catch(() => {});
-        }
-        activeOutgoingRefs.forEach(ref => {
-          ref.remove().catch(() => {});
-        });
-        activeOutgoingRefs.clear();
-
-        createdObjectUrls.forEach(url => {
-          try { URL.revokeObjectURL(url); } catch (e) {}
-        });
-        createdObjectUrls.clear();
-      } catch (e) {}
-    }
-
-    window.addEventListener('pagehide', purgeAllSessionDataOnExit);
-    window.addEventListener('beforeunload', purgeAllSessionDataOnExit);
-
-    // ==========================================
-    // 4. ป้องกันเปิดซ้ำหลายแท็บ
-    // ==========================================
-    const tabChannel = new BroadcastChannel('dropple_natchanon_guard_v4');
+    const tabChannel = new BroadcastChannel('dropple_natchanon_guard_v5');
     tabChannel.postMessage({ type: 'ping' });
     tabChannel.onmessage = (e) => {
       if (e.data.type === 'ping') {
@@ -1037,7 +1036,7 @@
     }
 
     // ==========================================
-    // 5. ยืนยันตัวตน Firebase และระบบลงทะเบียนห้องรับส่งชั่วคราว
+    // 4. ยืนยันตัวตน Firebase และระบบลงทะเบียนห้องรับส่ง (เสถียร ไม่ตัดการเชื่อมต่อเอง)
     // ==========================================
     async function ensureFirebaseAuth() {
       if (auth.currentUser) {
@@ -1055,6 +1054,51 @@
       }
     }
 
+    function renderQrCodes(shareUrl) {
+      const qrContainer = document.getElementById('qrcode');
+      qrContainer.innerHTML = '';
+      new QRCode(qrContainer, {
+        text: shareUrl,
+        width: 152,
+        height: 152,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      // บังคับแสดงผล canvas ทันทีบน Safari โดยไม่รอ img onload
+      const qCanvas = qrContainer.querySelector('canvas');
+      const qImg = qrContainer.querySelector('img');
+      if (qCanvas) {
+        qCanvas.style.display = 'block';
+        qCanvas.style.width = '152px';
+        qCanvas.style.height = '152px';
+      }
+      if (qImg) {
+        qImg.style.display = 'none';
+      }
+
+      const modalQrContainer = document.getElementById('modalQrcode');
+      modalQrContainer.innerHTML = '';
+      new QRCode(modalQrContainer, {
+        text: shareUrl,
+        width: 180,
+        height: 180,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      const mCanvas = modalQrContainer.querySelector('canvas');
+      const mImg = modalQrContainer.querySelector('img');
+      if (mCanvas) {
+        mCanvas.style.display = 'block';
+        mCanvas.style.width = '180px';
+        mCanvas.style.height = '180px';
+      }
+      if (mImg) {
+        mImg.style.display = 'none';
+      }
+    }
+
     async function initApp() {
       applyTheme();
       document.getElementById('currentHostDisplay').textContent = getShortDisplayUrl();
@@ -1063,29 +1107,32 @@
       setupCodeBoxes();
       requestScreenWakeLock();
 
+      // แสดงรหัสและ QR ทันทีตั้งแต่โหลดหน้า
+      if (!myCode || myCode.length !== 6) {
+        myCode = generateRandomCode();
+        localStorage.setItem('dp_pairing_code', myCode);
+      }
+      document.getElementById('myPairingCode').textContent = myCode;
+      document.getElementById('modalPairingCode').textContent = myCode;
+      document.getElementById('inlineCodeHint').textContent = myCode;
+      renderQrCodes(`${getShareBaseUrl()}?code=${myCode}`);
+
       db.ref('.info/connected').on('value', (snap) => {
-        setConnectionStatus(snap.val() === true);
+        const online = snap.val() === true;
+        setConnectionStatus(online);
+        if (online && myCode && currentAuthUid) {
+          syncFirebasePresence(true);
+        }
       });
 
       const uid = await ensureFirebaseAuth();
       if (!uid) return;
 
-      // ล้างรหัสและไฟล์ตกค้างจากรอบก่อนหน้าทันทีที่เปิดหน้าใหม่หรือรีเฟรช
-      const prevCode = sessionStorage.getItem('dp_active_code');
-      if (prevCode) {
-        await Promise.all([
-          db.ref(`inbox/${prevCode}`).remove().catch(() => {}),
-          db.ref(`signals/${prevCode}`).remove().catch(() => {}),
-          db.ref(`codes/${prevCode}`).remove().catch(() => {})
-        ]);
-        sessionStorage.removeItem('dp_active_code');
-      }
-
-      await syncFirebasePresence(false);
+      await syncFirebasePresence(true);
       checkUrlCodeParam();
     }
 
-    async function syncFirebasePresence(keepExistingCode = false) {
+    async function syncFirebasePresence(keepExistingCode = true) {
       const uid = await ensureFirebaseAuth();
       if (!uid) return;
       await registerPairingCode(keepExistingCode, uid);
@@ -1112,7 +1159,7 @@
       return res;
     }
 
-    async function registerPairingCode(keepExistingCode = false, uid = currentAuthUid) {
+    async function registerPairingCode(keepExistingCode = true, uid = currentAuthUid) {
       if (!uid) return;
       const oldCode = myCode;
       if (!keepExistingCode || !myCode) {
@@ -1126,16 +1173,13 @@
           ]);
         }
         myCode = generateRandomCode();
-        sessionStorage.setItem('dp_active_code', myCode);
-        await Promise.all([
-          db.ref(`inbox/${myCode}`).remove().catch(() => {}),
-          db.ref(`signals/${myCode}`).remove().catch(() => {})
-        ]);
+        localStorage.setItem('dp_pairing_code', myCode);
       }
 
       document.getElementById('myPairingCode').textContent = myCode;
       document.getElementById('modalPairingCode').textContent = myCode;
       document.getElementById('inlineCodeHint').textContent = myCode;
+      renderQrCodes(`${getShareBaseUrl()}?code=${myCode}`);
 
       const codeRef = db.ref(`codes/${myCode}`);
       const inboxRef = db.ref(`inbox/${myCode}`);
@@ -1149,39 +1193,18 @@
         timestamp: firebase.database.ServerValue.TIMESTAMP
       });
 
+      // ตั้งค่าให้ Firebase ลบข้อมูลเมื่อปิดหน้าเว็บหรือหลุดการเชื่อมต่อออกจากเซิร์ฟเวอร์จริง
       codeRef.onDisconnect().remove();
       inboxRef.onDisconnect().remove();
       signalsRef.onDisconnect().remove();
 
       listenForIncomingSignals(myCode);
       listenForIncomingInbox(myCode);
-
-      const shareUrl = `${getShareBaseUrl()}?code=${myCode}`;
-
-      const qrContainer = document.getElementById('qrcode');
-      qrContainer.innerHTML = '';
-      new QRCode(qrContainer, {
-        text: shareUrl,
-        width: 152,
-        height: 152,
-        colorDark: '#000000',
-        colorLight: '#ffffff'
-      });
-
-      const modalQrContainer = document.getElementById('modalQrcode');
-      modalQrContainer.innerHTML = '';
-      new QRCode(modalQrContainer, {
-        text: shareUrl,
-        width: 180,
-        height: 180,
-        colorDark: '#000000',
-        colorLight: '#ffffff'
-      });
     }
 
     function regenerateCode() {
       registerPairingCode(false, currentAuthUid);
-      showToast('เปลี่ยนรหัสและล้างห้องรับส่งเดิมแล้ว');
+      showToast('เปลี่ยนรหัสรับไฟล์ใหม่แล้ว');
     }
 
     function copyShareLink() {
@@ -1241,7 +1264,7 @@
     }
 
     // ==========================================
-    // 6. การจับคู่ผ่าน Firebase Signals
+    // 5. การจับคู่ผ่าน Firebase Signals (เชื่อมต่อแม่นยำ 100%)
     // ==========================================
     function setupCodeBoxes() {
       const boxes = document.querySelectorAll('.code-box');
@@ -1281,7 +1304,9 @@
     }
 
     function clearCodeBoxes() {
-      document.querySelectorAll('.code-box').forEach(b => b.value = '');
+      const boxes = document.querySelectorAll('.code-box');
+      boxes.forEach(b => b.value = '');
+      if (boxes[0]) boxes[0].focus();
     }
 
     function checkSixBoxesAndConnect() {
@@ -1308,7 +1333,7 @@
       if (code.length !== 6) return;
 
       if (code === myCode) {
-        showToast('ไม่สามารถเชื่อมต่อกับเครื่องตัวเองได้', true);
+        showToast('ไม่สามารถเชื่อมต่อกับรหัสของเครื่องตัวเองได้', true);
         clearCodeBoxes();
         return;
       }
@@ -1318,7 +1343,8 @@
         const snap = await db.ref(`codes/${code}`).once('value');
         const target = snap.val();
         if (!target) {
-          showToast('ไม่พบรหัสนี้ หรือเครื่องปลายทางปิดหน้าเว็บไปแล้ว', true);
+          showToast('ไม่พบรหัสนี้ กรุณาตรวจสอบรหัส 6 หลักบนเครื่องปลายทาง', true);
+          clearCodeBoxes();
           return;
         }
 
@@ -1338,10 +1364,22 @@
           timestamp: firebase.database.ServerValue.TIMESTAMP
         });
 
+        let handled = false;
+        const timeoutId = setTimeout(() => {
+          if (!handled) {
+            handled = true;
+            reqRef.off();
+            reqRef.remove().catch(() => {});
+            showToast('เครื่องปลายทางไม่ตอบสนอง กรุณาลองใหม่อีกครั้ง', true);
+          }
+        }, 15000);
+
         reqRef.on('value', (resSnap) => {
           const val = resSnap.val();
-          if (!val || val.status === 'pending') return;
+          if (!val || val.status === 'pending' || handled) return;
 
+          handled = true;
+          clearTimeout(timeoutId);
           reqRef.off();
           reqRef.remove().catch(() => {});
 
@@ -1358,10 +1396,12 @@
             showToast(`เชื่อมต่อกับ ${peerMeta.name} สำเร็จ`);
           } else if (val.status === 'rejected') {
             showToast('เครื่องปลายทางปฏิเสธการเชื่อมต่อ', true);
+            clearCodeBoxes();
           }
         });
       } catch (err) {
-        showToast('ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาเช็ก Firebase Rules', true);
+        console.error('Connect error:', err);
+        showToast('เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล', true);
       }
     }
 
@@ -1541,7 +1581,7 @@
     }
 
     // ==========================================
-    // 7. การสลับแท็บ (รับไฟล์ / ส่งไฟล์)
+    // 6. การสลับแท็บ (รับไฟล์ / ส่งไฟล์)
     // ==========================================
     function switchTab(tab) {
       const receiveBtn = document.getElementById('tabReceiveBtn');
@@ -1567,7 +1607,7 @@
     }
 
     // ==========================================
-    // 8. การส่งและรับไฟล์ทุกประเภทแบบชั่วคราว (ลบข้อมูลทันทีหลังส่งถึงและเมื่อรีเฟรช)
+    // 7. การส่งและรับไฟล์ทุกประเภท (ลบเฉพาะไฟล์ออกจากฐานข้อมูลหลังรับเสร็จ / ปิดระบบ)
     // ==========================================
     function resolveMimeType(filename, rawMime) {
       if (rawMime && rawMime !== 'application/octet-stream') return rawMime;
@@ -1708,7 +1748,7 @@
       input.value = '';
 
       const msgRef = db.ref(`inbox/${activePeerInfo.code}/${msgId}`);
-      activeOutgoingRefs.add(msgRef);
+      // ลบข้อความชั่วคราวออกทันทีหากระบบปิดตัวลง
       msgRef.onDisconnect().remove();
 
       try {
@@ -1723,7 +1763,6 @@
         playNotificationSound('send');
         appendSentTextItem(text);
       } catch (err) {
-        activeOutgoingRefs.delete(msgRef);
         msgRef.remove().catch(() => {});
         showToast('ส่งข้อความไม่สำเร็จ กรุณาลองใหม่', true);
       }
@@ -1741,7 +1780,7 @@
         const statusEl = appendSentFileItem(fileId, file.name, file.size);
 
         const transferRef = db.ref(`inbox/${targetCode}/${fileId}`);
-        activeOutgoingRefs.add(transferRef);
+        // ตั้งเวลาให้เซิร์ฟเวอร์ลบไฟล์นี้ออกทันทีหากปิดระบบหรือหลุดการเชื่อมต่อ
         transferRef.onDisconnect().remove();
 
         try {
@@ -1772,7 +1811,6 @@
           }
 
           await transferRef.update({ completed: true });
-          activeOutgoingRefs.delete(transferRef);
 
           playNotificationSound('send');
           statusEl.innerHTML = `
@@ -1784,13 +1822,12 @@
           sentStats.bytes += file.size;
           updateSentSummary();
 
-          // ระบบสำรองล้างข้อมูลฝั่งส่งหากปลายทางตัดการเชื่อมต่อก่อนลบเอง (ภายใน 90 วินาที)
+          // ล้างไฟล์ออกจากฐานข้อมูลอัตโนมัติภายใน 2 นาทีเพื่อไม่ให้ฐานข้อมูลรับไฟล์สะสม
           setTimeout(() => {
             transferRef.remove().catch(() => {});
-          }, 90000);
+          }, 120000);
         } catch (err) {
           console.error('Upload error:', err);
-          activeOutgoingRefs.delete(transferRef);
           statusEl.textContent = 'ล้มเหลว';
           showToast(`ส่งไฟล์ ${file.name} ไม่สำเร็จ กรุณาลองใหม่`, true);
           transferRef.remove().catch(() => {});
@@ -1808,15 +1845,15 @@
         const item = snap.val();
         if (!item || !item.id || processedTransfers.has(item.id)) return;
 
-        // ลบทิ้งทันทีหากเป็นข้อมูลตกค้างเกินกำหนด
-        if (typeof item.timestamp === 'number' && (Date.now() - item.timestamp > STALE_ITEM_TTL_MS)) {
+        // ล้างไฟล์เก่าที่ค้างอยู่เกิน 5 นาทีออกจากฐานข้อมูลทันที
+        if (typeof item.timestamp === 'number' && (Date.now() - item.timestamp > STALE_FILE_TTL_MS)) {
           snap.ref.remove().catch(() => {});
           return;
         }
 
         if (item.type === 'text-message') {
           processedTransfers.add(item.id);
-          // ลบข้อความออกจากฐานข้อมูลทันทีที่อ่านเสร็จ
+          // ลบข้อความออกจากฐานข้อมูลทันทีที่รับเสร็จ
           snap.ref.remove().catch(() => {});
 
           playNotificationSound('receive');
@@ -1907,7 +1944,7 @@
         record.ref.child('chunks').off();
       } catch (e) {}
 
-      // ลบไฟล์และก้อนข้อมูลทั้งหมดออกจากฐานข้อมูลทันทีที่รับครบ 100%
+      // ลบไฟล์และก้อนข้อมูลทั้งหมดออกจากฐานข้อมูลทันทีที่รับครบ 100% เพื่อไม่ให้ฐานข้อมูลเต็ม
       await record.ref.remove().catch(() => {});
 
       playNotificationSound('receive');
@@ -1918,7 +1955,6 @@
 
       const blob = new Blob(safeChunks, { type: realMime });
       const blobUrl = URL.createObjectURL(blob);
-      createdObjectUrls.add(blobUrl);
 
       let safeDataUrl = null;
       if (blob.size <= 15 * 1024 * 1024) {
@@ -1967,7 +2003,7 @@
     }
 
     // ==========================================
-    // 9. การแสดงผลรายการไฟล์และข้อความ
+    // 8. การแสดงผลรายการไฟล์และข้อความ
     // ==========================================
     function getCurrentTimeStr() {
       const now = new Date();
@@ -2167,7 +2203,7 @@
     }
 
     // ==========================================
-    // 10. หน้าต่างดูตัวอย่างไฟล์เต็มจอ (Preview Modal)
+    // 9. หน้าต่างดูตัวอย่างไฟล์เต็มจอ (Preview Modal)
     // ==========================================
     function openPreviewModal(filename, mime, previewUrl, downloadUrl) {
       const modal = document.getElementById('previewModal');
@@ -2207,7 +2243,7 @@
     }
 
     // ==========================================
-    // 11. Drag & Drop และ Clipboard Paste
+    // 10. Drag & Drop และ Clipboard Paste
     // ==========================================
     const dropZone = document.getElementById('dropZone');
     dropZone.addEventListener('dragover', (e) => {
@@ -2234,7 +2270,7 @@
     });
 
     // ==========================================
-    // 12. การจัดการหน้าต่างตั้งค่า, โฟลเดอร์, และ Modals
+    // 11. การจัดการหน้าต่างตั้งค่า, โฟลเดอร์, และ Modals
     // ==========================================
     function toggleSettings(show) {
       const modal = document.getElementById('settingsModal');
