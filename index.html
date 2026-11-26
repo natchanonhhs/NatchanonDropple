@@ -7,6 +7,10 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Dropple — ส่งไฟล์และข้อความตรงระหว่างเครื่อง</title>
+  <meta name="description" content="ส่งไฟล์และข้อความตรงระหว่างเครื่อง" />
+  <meta property="og:title" content="Dropple — ส่งไฟล์และข้อความตรงระหว่างเครื่อง" />
+  <meta property="og:description" content="ส่งไฟล์และข้อความตรงระหว่างเครื่อง" />
+  <meta property="og:type" content="website" />
   <link id="faviconLink" rel="icon" type="image/png" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
   <link id="shortcutIconLink" rel="shortcut icon" type="image/png" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
   <link id="appleTouchIconLink" rel="apple-touch-icon" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
@@ -184,19 +188,27 @@
       border: 1px solid var(--border-main);
     }
 
-    /* บังคับขนาด QR Code ให้แสดงผลสมบูรณ์บน Safari และทุกเบราว์เซอร์ */
+    /* บังคับขนาด QR Code ให้แสดงผลสมบูรณ์เพียงภาพเดียวบน Safari และทุกเบราว์เซอร์ */
     #qrcode {
       width: 152px;
       height: 152px;
       display: flex;
       align-items: center;
       justify-content: center;
+      overflow: hidden;
     }
     #qrcode canvas,
-    #qrcode img {
+    #qrcode table {
       width: 152px !important;
       height: 152px !important;
       display: block !important;
+      margin: 0 auto !important;
+    }
+    #qrcode img {
+      width: 152px !important;
+      height: 152px !important;
+      display: none;
+      margin: 0 auto !important;
     }
     #modalQrcode {
       width: 180px;
@@ -204,12 +216,20 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      overflow: hidden;
     }
     #modalQrcode canvas,
-    #modalQrcode img {
+    #modalQrcode table {
       width: 180px !important;
       height: 180px !important;
       display: block !important;
+      margin: 0 auto !important;
+    }
+    #modalQrcode img {
+      width: 180px !important;
+      height: 180px !important;
+      display: none;
+      margin: 0 auto !important;
     }
 
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -261,13 +281,13 @@
 
   <div id="qrModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
     <div class="card-surface rounded-2xl max-w-xs w-full p-6 text-center shadow-2xl relative">
-      <button onclick="toggleQrModal(false)" class="absolute top-4 right-4 text-dim hover:text-main p-1">
+      <button onclick="toggleQrModal(false)" aria-label="ปิดหน้าต่าง QR" class="absolute top-4 right-4 text-dim hover:text-main p-1">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
       <h3 class="text-sm font-semibold text-main">สแกนจากมือถือ</h3>
-      <div class="mt-4 inline-flex items-center justify-center bg-white p-3 rounded-xl border border-slate-200">
+      <div class="mt-4 inline-flex items-center justify-center bg-white p-3 rounded-xl border border-slate-200 w-[204px] h-[204px]">
         <div id="modalQrcode"></div>
       </div>
       <div id="modalPairingCode" class="mt-3 text-2xl font-bold tracking-[0.28em] text-main pl-1">------</div>
@@ -279,7 +299,7 @@
     <div class="card-surface rounded-2xl max-w-md w-full p-6 shadow-2xl">
       <div class="flex items-center justify-between pb-3 border-b border-main">
         <h3 class="text-base font-semibold text-main">วิธีใช้ Dropple</h3>
-        <button onclick="toggleHelpModal(false)" class="text-dim hover:text-main p-1">
+        <button onclick="toggleHelpModal(false)" aria-label="ปิดวิธีใช้" class="text-dim hover:text-main p-1">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -289,7 +309,7 @@
         <li>เปิดหน้าเว็บนี้บนทั้งสองเครื่องที่ต้องการส่งข้อมูลหากัน</li>
         <li>สแกน QR Code หรือนำรหัส 6 หลักของเครื่องรับไปกรอกในแท็บ <strong class="text-accent">ส่งไฟล์</strong> ของอีกเครื่อง</li>
         <li>เลือกไฟล์ รูปภาพ วิดีโอ เอกสาร หรือพิมพ์ข้อความเพื่อส่งระหว่างเครื่องได้ทันที</li>
-        <li>ไฟล์และข้อความจะถูกลบออกจากฐานข้อมูลทันทีที่รับเสร็จ และล้างไฟล์ตกค้างอัตโนมัติเมื่อปิดหน้าเว็บ</li>
+        <li>ไฟล์และข้อความจะถูกลบออกจากฐานข้อมูลทันทีที่รับเสร็จ และล้างไฟล์ตกค้างอัตโนมัติเมื่อรีเฟรชหรือปิดหน้าเว็บ</li>
       </ol>
       <button onclick="toggleHelpModal(false)" class="mt-5 w-full teal-btn text-xs font-medium py-2.5 rounded-xl transition">
         เริ่มใช้งาน
@@ -301,7 +321,7 @@
     <div class="card-surface rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between pb-3">
         <h3 class="text-base font-semibold text-main">ตั้งค่า</h3>
-        <button onclick="toggleSettings(false)" class="text-accent hover:opacity-80 p-1">
+        <button onclick="toggleSettings(false)" aria-label="ปิดตั้งค่า" class="text-accent hover:opacity-80 p-1">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -327,7 +347,7 @@
       </div>
 
       <div class="mt-5">
-        <label class="block text-xs font-medium text-sec mb-2">ชื่อเครื่องนี้</label>
+        <label for="deviceNameInput" class="block text-xs font-medium text-sec mb-2">ชื่อเครื่องนี้</label>
         <input type="text" id="deviceNameInput" onchange="saveDeviceName()" onblur="saveDeviceName()"
           class="w-full sub-surface rounded-xl px-3.5 py-2.5 text-sm text-main focus:border-teal-500 focus:outline-none" />
         <p class="text-[11px] text-dim mt-1.5">เครื่องอื่นใน Wi-Fi เดียวกันจะเห็นชื่อนี้</p>
@@ -355,7 +375,7 @@
             <div class="text-xs font-medium text-main">เปิดดูไฟล์ทันทีที่ได้รับ</div>
             <div class="text-[11px] text-dim">รูป วิดีโอ เพลง และ PDF · ต้องเปิดหน้านี้ไว้</div>
           </div>
-          <button type="button" id="toggleAutoPreview" onclick="toggleSettingSwitch('autoPreview')"
+          <button type="button" id="toggleAutoPreview" aria-label="เปิดดูไฟล์ทันทีที่ได้รับ" onclick="toggleSettingSwitch('autoPreview')"
             class="w-11 h-6 rounded-full transition-colors relative shrink-0">
             <span class="dot block w-5 h-5 rounded-full bg-white shadow transform transition-transform translate-x-0.5"></span>
           </button>
@@ -366,7 +386,7 @@
             <div class="text-xs font-medium text-main">คัดลอกข้อความที่ได้รับทันที</div>
             <div class="text-[11px] text-dim">ถ้าแท็บนี้อยู่เบื้องหลัง จะคัดลอกตอนกลับมาที่แท็บ</div>
           </div>
-          <button type="button" id="toggleAutoCopy" onclick="toggleSettingSwitch('autoCopyText')"
+          <button type="button" id="toggleAutoCopy" aria-label="คัดลอกข้อความที่ได้รับทันที" onclick="toggleSettingSwitch('autoCopyText')"
             class="w-11 h-6 rounded-full transition-colors relative shrink-0">
             <span class="dot block w-5 h-5 rounded-full bg-white shadow transform transition-transform translate-x-5"></span>
           </button>
@@ -377,7 +397,7 @@
             <div class="text-xs font-medium text-main">เสียงแจ้งเตือน</div>
             <div class="text-[11px] text-dim">เล่นเสียงเมื่อได้รับไฟล์หรือข้อความ</div>
           </div>
-          <button type="button" id="toggleSoundAlert" onclick="toggleSettingSwitch('soundAlert')"
+          <button type="button" id="toggleSoundAlert" aria-label="เสียงแจ้งเตือน" onclick="toggleSettingSwitch('soundAlert')"
             class="w-11 h-6 rounded-full transition-colors relative shrink-0">
             <span class="dot block w-5 h-5 rounded-full bg-white shadow transform transition-transform translate-x-5"></span>
           </button>
@@ -412,7 +432,7 @@
         <button onclick="confirmRememberCurrentPeer()" class="teal-btn font-semibold text-xs px-3.5 py-1.5 rounded-full transition">
           จำไว้
         </button>
-        <button onclick="dismissRememberBar()" class="text-dim hover:text-main p-1">
+        <button onclick="dismissRememberBar()" aria-label="ปิดแถบจำเครื่อง" class="text-dim hover:text-main p-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -454,14 +474,14 @@
           <span id="quickThemeLabel" class="text-[11px] font-medium hidden sm:inline">เริ่มต้น</span>
         </button>
 
-        <button onclick="toggleHelpModal(true)" title="วิธีใช้"
+        <button onclick="toggleHelpModal(true)" title="วิธีใช้" aria-label="วิธีใช้"
           class="w-9 h-9 rounded-full card-surface hover:border-teal-500 flex items-center justify-center text-dim hover:text-main transition">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01" />
           </svg>
         </button>
 
-        <button onclick="toggleSettings(true)" title="ตั้งค่า"
+        <button onclick="toggleSettings(true)" title="ตั้งค่า" aria-label="ตั้งค่า"
           class="w-9 h-9 rounded-full card-surface hover:border-teal-500 flex items-center justify-center text-dim hover:text-main transition">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -528,7 +548,7 @@
           <h3 class="text-xs font-medium text-dim">สแกนจากมือถือ</h3>
 
           <div class="mt-4 flex flex-col items-center">
-            <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center">
+            <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center w-[176px] h-[176px]">
               <div id="qrcode"></div>
             </div>
 
@@ -610,19 +630,24 @@
           </p>
 
           <div id="codeBoxesWrapper" class="grid grid-cols-6 gap-2 mt-3.5">
-            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="0"
+            <input type="text" aria-label="รหัสหลักที่ 1" autocapitalize="characters" autocomplete="off" spellcheck="false" data-idx="0"
               class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
-            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="1"
+            <input type="text" aria-label="รหัสหลักที่ 2" autocapitalize="characters" autocomplete="off" spellcheck="false" data-idx="1"
               class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
-            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="2"
+            <input type="text" aria-label="รหัสหลักที่ 3" autocapitalize="characters" autocomplete="off" spellcheck="false" data-idx="2"
               class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
-            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="3"
+            <input type="text" aria-label="รหัสหลักที่ 4" autocapitalize="characters" autocomplete="off" spellcheck="false" data-idx="3"
               class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
-            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="4"
+            <input type="text" aria-label="รหัสหลักที่ 5" autocapitalize="characters" autocomplete="off" spellcheck="false" data-idx="4"
               class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
-            <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="5"
+            <input type="text" aria-label="รหัสหลักที่ 6" autocapitalize="characters" autocomplete="off" spellcheck="false" data-idx="5"
               class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
           </div>
+
+          <button type="button" id="connectCodeBtn" onclick="connectByCode(getEnteredCode(), true)"
+            class="mt-3 w-full teal-btn py-2.5 px-4 rounded-xl text-xs font-semibold transition">
+            เชื่อมต่อ
+          </button>
 
           <p class="text-[11px] text-dim mt-3.5 leading-relaxed">
             ไม่เห็นเครื่องที่จะส่ง? (มักเจอระหว่าง Mac กับ Windows) ใส่รหัส 6 ตัวแทน แล้วกด <strong class="text-sec">จำไว้</strong> ที่เครื่องรับ ครั้งหน้าจะขึ้นในรายการเอง
@@ -730,13 +755,38 @@
     const LOGO_LIGHT_URL = 'https://i.postimg.cc/GpWPwRG0/N.png';
     const LOGO_DARK_URL = 'https://i.postimg.cc/VvBWWhJq/N.png';
 
+    function safeUUID() {
+      try {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+          return window.crypto.randomUUID();
+        }
+        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+          const buf = new Uint8Array(16);
+          window.crypto.getRandomValues(buf);
+          buf[6] = (buf[6] & 0x0f) | 0x40;
+          buf[8] = (buf[8] & 0x3f) | 0x80;
+          const hex = Array.from(buf, b => b.toString(16).padStart(2, '0')).join('');
+          return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+        }
+      } catch (e) {}
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
     let themePreference = localStorage.getItem('dp_theme') || 'system';
     const systemDarkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 
     let currentAuthUid = null;
+    let cachedAuthToken = null;
     let myCode = localStorage.getItem('dp_pairing_code') || null;
+    let listeningCode = null;
+    let bootCleanedCode = null;
     let wifiRoomKey = null;
     let isSessionConnected = false;
+    let isConnectingByCode = false;
     let activePeerInfo = null;
     let lastConnectedPeer = null;
     let pendingHandshake = null;
@@ -753,8 +803,9 @@
     let sentStats = { count: 0, bytes: 0 };
     const incomingTransfers = {};
     const processedTransfers = new Set();
+    const activeOutgoingFilePaths = new Set();
 
-    const myToken = localStorage.getItem('dp_token') || crypto.randomUUID();
+    const myToken = localStorage.getItem('dp_token') || safeUUID();
     localStorage.setItem('dp_token', myToken);
 
     let myDeviceName = localStorage.getItem('dp_device_name') || detectDeviceName();
@@ -765,6 +816,45 @@
       autoCopyText: true,
       soundAlert: true
     }));
+
+    auth.onIdTokenChanged(async (user) => {
+      if (user) {
+        currentAuthUid = user.uid;
+        try {
+          cachedAuthToken = await user.getIdToken();
+        } catch (e) {}
+      } else {
+        cachedAuthToken = null;
+      }
+    });
+
+    function buildRtdbRestDeleteUrl(path) {
+      const cleanBase = firebaseConfig.databaseURL.replace(/\/+$/, '');
+      const cleanPath = path.replace(/^\/+/, '');
+      const url = `${cleanBase}/${cleanPath}.json`;
+      return cachedAuthToken ? `${url}?auth=${encodeURIComponent(cachedAuthToken)}` : url;
+    }
+
+    function cleanupFilesOnExit() {
+      const pathsToDelete = new Set(activeOutgoingFilePaths);
+      if (myCode) {
+        pathsToDelete.add(`inbox/${myCode}`);
+      }
+      pathsToDelete.forEach((path) => {
+        try {
+          db.ref(path).remove().catch(() => {});
+        } catch (e) {}
+        try {
+          fetch(buildRtdbRestDeleteUrl(path), {
+            method: 'DELETE',
+            keepalive: true
+          }).catch(() => {});
+        } catch (e) {}
+      });
+    }
+
+    window.addEventListener('pagehide', cleanupFilesOnExit);
+    window.addEventListener('beforeunload', cleanupFilesOnExit);
 
     function applyTheme() {
       const isDark = themePreference === 'dark' || (themePreference === 'system' && systemDarkMedia.matches);
@@ -1041,11 +1131,17 @@
     async function ensureFirebaseAuth() {
       if (auth.currentUser) {
         currentAuthUid = auth.currentUser.uid;
+        try {
+          cachedAuthToken = await auth.currentUser.getIdToken();
+        } catch (e) {}
         return currentAuthUid;
       }
       try {
         const cred = await auth.signInAnonymously();
         currentAuthUid = cred.user.uid;
+        try {
+          cachedAuthToken = await cred.user.getIdToken();
+        } catch (e) {}
         return currentAuthUid;
       } catch (err) {
         console.error('Firebase Auth Error:', err);
@@ -1054,49 +1150,71 @@
       }
     }
 
-    function renderQrCodes(shareUrl) {
-      const qrContainer = document.getElementById('qrcode');
-      qrContainer.innerHTML = '';
-      new QRCode(qrContainer, {
-        text: shareUrl,
-        width: 152,
-        height: 152,
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.M
-      });
-      // บังคับแสดงผล canvas ทันทีบน Safari โดยไม่รอ img onload
-      const qCanvas = qrContainer.querySelector('canvas');
-      const qImg = qrContainer.querySelector('img');
-      if (qCanvas) {
-        qCanvas.style.display = 'block';
-        qCanvas.style.width = '152px';
-        qCanvas.style.height = '152px';
-      }
-      if (qImg) {
-        qImg.style.display = 'none';
+    function renderSingleQr(container, shareUrl, size) {
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (typeof QRCode === 'undefined') {
+        container.innerHTML = '<span class="text-[11px] text-slate-500 text-center px-2">กำลังโหลด QR...</span>';
+        setTimeout(() => {
+          if (typeof QRCode !== 'undefined') renderSingleQr(container, shareUrl, size);
+        }, 450);
+        return;
       }
 
-      const modalQrContainer = document.getElementById('modalQrcode');
-      modalQrContainer.innerHTML = '';
-      new QRCode(modalQrContainer, {
+      new QRCode(container, {
         text: shareUrl,
-        width: 180,
-        height: 180,
+        width: size,
+        height: size,
         colorDark: '#000000',
         colorLight: '#ffffff',
         correctLevel: QRCode.CorrectLevel.M
       });
-      const mCanvas = modalQrContainer.querySelector('canvas');
-      const mImg = modalQrContainer.querySelector('img');
-      if (mCanvas) {
-        mCanvas.style.display = 'block';
-        mCanvas.style.width = '180px';
-        mCanvas.style.height = '180px';
+
+      const canvas = container.querySelector('canvas');
+      const img = container.querySelector('img');
+      if (canvas) {
+        // ลบ img ที่ซ้ำซ้อนออกเพื่อป้องกัน QR ซ้อนกัน 2 ภาพ
+        if (img) img.remove();
+        canvas.style.display = 'block';
+        canvas.style.width = `${size}px`;
+        canvas.style.height = `${size}px`;
+      } else if (img) {
+        img.style.setProperty('display', 'block', 'important');
+        img.style.width = `${size}px`;
+        img.style.height = `${size}px`;
       }
-      if (mImg) {
-        mImg.style.display = 'none';
-      }
+    }
+
+    function renderQrCodes(shareUrl) {
+      renderSingleQr(document.getElementById('qrcode'), shareUrl, 152);
+      renderSingleQr(document.getElementById('modalQrcode'), shareUrl, 180);
+    }
+
+    async function restoreSavedPeerSession() {
+      try {
+        const raw = sessionStorage.getItem('dp_active_peer');
+        if (!raw) return;
+        const savedPeer = JSON.parse(raw);
+        if (!savedPeer || !savedPeer.code || savedPeer.code === myCode) {
+          sessionStorage.removeItem('dp_active_peer');
+          return;
+        }
+        const snap = await db.ref(`codes/${savedPeer.code}`).once('value');
+        const target = snap.val();
+        if (target) {
+          const peerMeta = {
+            code: savedPeer.code,
+            name: target.deviceName || savedPeer.name,
+            token: target.token || savedPeer.token || null,
+            viaCode: Boolean(savedPeer.viaCode)
+          };
+          lastConnectedPeer = peerMeta;
+          activateSession(peerMeta);
+        } else {
+          sessionStorage.removeItem('dp_active_peer');
+        }
+      } catch (e) {}
     }
 
     async function initApp() {
@@ -1129,6 +1247,7 @@
       if (!uid) return;
 
       await syncFirebasePresence(true);
+      await restoreSavedPeerSession();
       checkUrlCodeParam();
     }
 
@@ -1166,6 +1285,7 @@
         if (oldCode) {
           db.ref(`inbox/${oldCode}`).off();
           db.ref(`signals/${oldCode}`).off();
+          listeningCode = null;
           await Promise.all([
             db.ref(`codes/${oldCode}`).remove().catch(() => {}),
             db.ref(`inbox/${oldCode}`).remove().catch(() => {}),
@@ -1183,23 +1303,49 @@
 
       const codeRef = db.ref(`codes/${myCode}`);
       const inboxRef = db.ref(`inbox/${myCode}`);
-      const signalsRef = db.ref(`signals/${myCode}`);
 
-      await codeRef.set({
-        code: myCode,
-        deviceName: myDeviceName,
-        token: myToken,
-        ownerUid: uid,
-        timestamp: firebase.database.ServerValue.TIMESTAMP
-      });
+      try {
+        await codeRef.set({
+          code: myCode,
+          deviceName: myDeviceName,
+          token: myToken,
+          ownerUid: uid,
+          timestamp: firebase.database.ServerValue.TIMESTAMP
+        });
 
-      // ตั้งค่าให้ Firebase ลบข้อมูลเมื่อปิดหน้าเว็บหรือหลุดการเชื่อมต่อออกจากเซิร์ฟเวอร์จริง
-      codeRef.onDisconnect().remove();
-      inboxRef.onDisconnect().remove();
-      signalsRef.onDisconnect().remove();
+        // ลบเฉพาะไฟล์ใน inbox อัตโนมัติเมื่อปิดหน้าเว็บหรือรีเฟรช (ไม่ลบการเชื่อมต่อ codes/signals)
+        inboxRef.onDisconnect().remove();
 
-      listenForIncomingSignals(myCode);
-      listenForIncomingInbox(myCode);
+        // ล้างไฟล์ตกค้างจากเซสชันก่อนหน้าทันทีเมื่อเปิด/รีเฟรชหน้าเว็บ
+        if (bootCleanedCode !== myCode) {
+          bootCleanedCode = myCode;
+          await inboxRef.remove().catch(() => {});
+        }
+
+        if (listeningCode !== myCode) {
+          listeningCode = myCode;
+          listenForIncomingSignals(myCode);
+          listenForIncomingInbox(myCode);
+        }
+      } catch (err) {
+        console.warn('Register code error:', err);
+        const isPermDenied = String(err?.code || err?.message || '').toLowerCase().includes('permission_denied') ||
+          String(err?.code || err?.message || '').toLowerCase().includes('permission denied');
+        const dot = document.getElementById('statusDot');
+        const sub = document.getElementById('headerSubtitle');
+        if (dot) dot.className = 'w-2 h-2 rounded-full bg-rose-500';
+        if (sub) {
+          sub.textContent = isPermDenied
+            ? 'ฐานข้อมูลบล็อกการเขียน (ตรวจสอบ Firebase Rules)'
+            : 'เชื่อมต่อฐานข้อมูลไม่สำเร็จ';
+        }
+        showToast(
+          isPermDenied
+            ? 'Firebase Rules บล็อกการเขียนข้อมูล กรุณาอัปเดต Rules ใน Firebase Console'
+            : 'ไม่สามารถลงทะเบียนรหัสกับฐานข้อมูลได้',
+          true
+        );
+      }
     }
 
     function regenerateCode() {
@@ -1230,7 +1376,6 @@
           deviceName: myDeviceName,
           ownerUid: uid
         });
-        myRoomRef.onDisconnect().remove();
 
         db.ref(`wifi_rooms/${wifiRoomKey}`).off('value');
         db.ref(`wifi_rooms/${wifiRoomKey}`).on('value', (snapshot) => {
@@ -1266,14 +1411,45 @@
     // ==========================================
     // 5. การจับคู่ผ่าน Firebase Signals (เชื่อมต่อแม่นยำ 100%)
     // ==========================================
+    function extractCodeFromInput(raw) {
+      const trimmed = (raw || '').trim();
+      if (!trimmed) return '';
+      if (trimmed.includes('://') || trimmed.includes('code=')) {
+        const match = trimmed.match(/[?&]code=([A-Za-z0-9]{6})/i);
+        if (match && match[1]) return match[1].toUpperCase();
+      }
+      return trimmed.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    }
+
     function setupCodeBoxes() {
       const boxes = document.querySelectorAll('.code-box');
       boxes.forEach((box, idx) => {
+        box.addEventListener('focus', () => {
+          setTimeout(() => box.select(), 0);
+        });
+
         box.addEventListener('input', (e) => {
-          const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-          e.target.value = val.slice(-1);
-          if (e.target.value && idx < boxes.length - 1) {
-            boxes[idx + 1].focus();
+          const cleaned = extractCodeFromInput(e.target.value);
+          if (!cleaned) {
+            e.target.value = '';
+            return;
+          }
+
+          if (cleaned.length > 1) {
+            const chars = cleaned.slice(0, 6).split('');
+            const startIdx = cleaned.length >= 6 ? 0 : idx;
+            chars.forEach((ch, offset) => {
+              if (boxes[startIdx + offset]) {
+                boxes[startIdx + offset].value = ch;
+              }
+            });
+            const nextIdx = Math.min(startIdx + chars.length, boxes.length - 1);
+            boxes[nextIdx].focus();
+          } else {
+            e.target.value = cleaned;
+            if (idx < boxes.length - 1) {
+              boxes[idx + 1].focus();
+            }
           }
           checkSixBoxesAndConnect();
         });
@@ -1282,17 +1458,20 @@
           if (e.key === 'Backspace' && !box.value && idx > 0) {
             boxes[idx - 1].focus();
             boxes[idx - 1].value = '';
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            connectByCode(getEnteredCode(), true);
           }
         });
 
         box.addEventListener('paste', (e) => {
           e.preventDefault();
-          const pasted = (e.clipboardData.getData('text') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+          const pasted = extractCodeFromInput(e.clipboardData.getData('text') || '').slice(0, 6);
           pasted.split('').forEach((char, i) => {
             if (boxes[i]) boxes[i].value = char;
           });
           if (pasted.length > 0) {
-            boxes[Math.min(pasted.length, 5)].focus();
+            boxes[Math.min(pasted.length - 1, 5)].focus();
           }
           checkSixBoxesAndConnect();
         });
@@ -1300,7 +1479,7 @@
     }
 
     function getEnteredCode() {
-      return Array.from(document.querySelectorAll('.code-box')).map(b => b.value).join('').toUpperCase();
+      return Array.from(document.querySelectorAll('.code-box')).map(b => b.value).join('').toUpperCase().replace(/[^A-Z0-9]/g, '');
     }
 
     function clearCodeBoxes() {
@@ -1311,14 +1490,14 @@
 
     function checkSixBoxesAndConnect() {
       const code = getEnteredCode();
-      if (code.length === 6) {
+      if (code.length === 6 && !isConnectingByCode) {
         connectByCode(code, true);
       }
     }
 
     function checkUrlCodeParam() {
       const params = new URLSearchParams(window.location.search);
-      const code = (params.get('code') || '').toUpperCase();
+      const code = (params.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (code.length === 6) {
         window.history.replaceState({}, document.title, window.location.pathname);
         switchTab('send');
@@ -1328,9 +1507,21 @@
       }
     }
 
+    function setConnectBtnLoading(loading) {
+      const btn = document.getElementById('connectCodeBtn');
+      if (!btn) return;
+      btn.disabled = loading;
+      btn.textContent = loading ? 'กำลังเชื่อมต่อ...' : 'เชื่อมต่อ';
+    }
+
     async function connectByCode(codeInput, viaCode = true) {
-      const code = (codeInput || getEnteredCode()).trim().toUpperCase();
-      if (code.length !== 6) return;
+      const code = extractCodeFromInput(codeInput || getEnteredCode()).slice(0, 6);
+      if (code.length !== 6) {
+        if (!codeInput) showToast('กรุณากรอกรหัส 6 หลักให้ครบ', true);
+        return;
+      }
+
+      if (isConnectingByCode) return;
 
       if (code === myCode) {
         showToast('ไม่สามารถเชื่อมต่อกับรหัสของเครื่องตัวเองได้', true);
@@ -1338,20 +1529,33 @@
         return;
       }
 
+      isConnectingByCode = true;
+      setConnectBtnLoading(true);
+
       try {
-        await ensureFirebaseAuth();
+        const uid = await ensureFirebaseAuth();
+        if (!uid) {
+          isConnectingByCode = false;
+          setConnectBtnLoading(false);
+          return;
+        }
+        if (!myCode) {
+          await syncFirebasePresence(true);
+        }
+
         const snap = await db.ref(`codes/${code}`).once('value');
         const target = snap.val();
         if (!target) {
           showToast('ไม่พบรหัสนี้ กรุณาตรวจสอบรหัส 6 หลักบนเครื่องปลายทาง', true);
+          isConnectingByCode = false;
+          setConnectBtnLoading(false);
           clearCodeBoxes();
           return;
         }
 
         showToast(`กำลังเชื่อมต่อกับ ${target.deviceName}...`);
-        const reqId = crypto.randomUUID();
+        const reqId = safeUUID();
         const reqRef = db.ref(`signals/${code}/${reqId}`);
-        reqRef.onDisconnect().remove();
 
         await reqRef.set({
           type: 'handshake-hello',
@@ -1365,11 +1569,46 @@
         });
 
         let handled = false;
+        let fallbackTimerId = null;
+
+        const finishSuccess = (peerName, peerToken, removeSignal) => {
+          if (handled) return;
+          handled = true;
+          clearTimeout(timeoutId);
+          if (fallbackTimerId) clearTimeout(fallbackTimerId);
+          reqRef.off();
+          if (removeSignal) reqRef.remove().catch(() => {});
+
+          const peerMeta = {
+            code: code,
+            name: peerName || target.deviceName || 'อุปกรณ์',
+            token: peerToken || target.token || null,
+            viaCode
+          };
+          lastConnectedPeer = peerMeta;
+          isConnectingByCode = false;
+          setConnectBtnLoading(false);
+          activateSession(peerMeta);
+          switchTab('send');
+          showToast(`เชื่อมต่อกับ ${peerMeta.name} สำเร็จ`);
+        };
+
+        // กรณีกรอกรหัส 6 หลักหรือสแกน QR สำเร็จแล้ว แต่เครื่องรับถูกพักจอชั่วคราว ให้เชื่อมทันทีหลังรอตอบกลับสั้นๆ
+        if (viaCode) {
+          fallbackTimerId = setTimeout(() => {
+            if (!handled) {
+              finishSuccess(target.deviceName, target.token, false);
+            }
+          }, 3500);
+        }
+
         const timeoutId = setTimeout(() => {
           if (!handled) {
             handled = true;
             reqRef.off();
             reqRef.remove().catch(() => {});
+            isConnectingByCode = false;
+            setConnectBtnLoading(false);
             showToast('เครื่องปลายทางไม่ตอบสนอง กรุณาลองใหม่อีกครั้ง', true);
           }
         }, 15000);
@@ -1378,29 +1617,24 @@
           const val = resSnap.val();
           if (!val || val.status === 'pending' || handled) return;
 
-          handled = true;
-          clearTimeout(timeoutId);
-          reqRef.off();
-          reqRef.remove().catch(() => {});
-
           if (val.status === 'accepted') {
-            const peerMeta = {
-              code: code,
-              name: val.responderName || target.deviceName,
-              token: val.responderToken || target.token || null,
-              viaCode
-            };
-            lastConnectedPeer = peerMeta;
-            activateSession(peerMeta);
-            switchTab('send');
-            showToast(`เชื่อมต่อกับ ${peerMeta.name} สำเร็จ`);
+            finishSuccess(val.responderName || target.deviceName, val.responderToken || target.token, true);
           } else if (val.status === 'rejected') {
+            handled = true;
+            clearTimeout(timeoutId);
+            if (fallbackTimerId) clearTimeout(fallbackTimerId);
+            reqRef.off();
+            reqRef.remove().catch(() => {});
+            isConnectingByCode = false;
+            setConnectBtnLoading(false);
             showToast('เครื่องปลายทางปฏิเสธการเชื่อมต่อ', true);
             clearCodeBoxes();
           }
         });
       } catch (err) {
         console.error('Connect error:', err);
+        isConnectingByCode = false;
+        setConnectBtnLoading(false);
         showToast('เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล', true);
       }
     }
@@ -1435,6 +1669,7 @@
               responderName: myDeviceName,
               responderToken: myToken
             });
+            setTimeout(() => snap.ref.remove().catch(() => {}), 5000);
             const peerMeta = {
               code: data.senderCode,
               name: data.deviceName,
@@ -1490,6 +1725,7 @@
           responderName: myDeviceName,
           responderToken: myToken
         });
+        setTimeout(() => ref.remove().catch(() => {}), 5000);
         const peerMeta = {
           code: data.senderCode,
           name: data.deviceName,
@@ -1500,12 +1736,16 @@
         activateSession(peerMeta);
       } else {
         await ref.update({ status: 'rejected' });
+        setTimeout(() => ref.remove().catch(() => {}), 5000);
       }
     }
 
     function activateSession(peerInfo) {
       isSessionConnected = true;
       activePeerInfo = peerInfo;
+      try {
+        sessionStorage.setItem('dp_active_peer', JSON.stringify(peerInfo));
+      } catch (e) {}
 
       document.getElementById('qrReceiveCard').classList.add('hidden');
       document.getElementById('connectedReceiveCard').classList.remove('hidden');
@@ -1524,7 +1764,7 @@
 
     function disconnectPeer() {
       if (activePeerInfo && activePeerInfo.code) {
-        const discId = crypto.randomUUID();
+        const discId = safeUUID();
         db.ref(`signals/${activePeerInfo.code}/${discId}`).set({
           type: 'disconnect',
           senderCode: myCode,
@@ -1537,6 +1777,9 @@
     function resetSessionUI(keepLastPeer = false) {
       isSessionConnected = false;
       activePeerInfo = null;
+      try {
+        sessionStorage.removeItem('dp_active_peer');
+      } catch (e) {}
       if (!keepLastPeer) {
         lastConnectedPeer = null;
       }
@@ -1607,7 +1850,7 @@
     }
 
     // ==========================================
-    // 7. การส่งและรับไฟล์ทุกประเภท (ลบเฉพาะไฟล์ออกจากฐานข้อมูลหลังรับเสร็จ / ปิดระบบ)
+    // 7. การส่งและรับไฟล์ทุกประเภท (ลบเฉพาะไฟล์ออกจากฐานข้อมูลหลังรับเสร็จ / รีเฟรช / ปิดระบบ)
     // ==========================================
     function resolveMimeType(filename, rawMime) {
       if (rawMime && rawMime !== 'application/octet-stream') return rawMime;
@@ -1744,10 +1987,13 @@
       const text = input.value.trim();
       if (!text || !isSessionConnected || !activePeerInfo?.code) return;
 
-      const msgId = crypto.randomUUID();
+      const msgId = safeUUID();
+      const targetCode = activePeerInfo.code;
+      const msgPath = `inbox/${targetCode}/${msgId}`;
       input.value = '';
 
-      const msgRef = db.ref(`inbox/${activePeerInfo.code}/${msgId}`);
+      const msgRef = db.ref(msgPath);
+      activeOutgoingFilePaths.add(msgPath);
       // ลบข้อความชั่วคราวออกทันทีหากระบบปิดตัวลง
       msgRef.onDisconnect().remove();
 
@@ -1762,7 +2008,13 @@
         });
         playNotificationSound('send');
         appendSentTextItem(text);
+
+        setTimeout(() => {
+          activeOutgoingFilePaths.delete(msgPath);
+          msgRef.remove().catch(() => {});
+        }, 120000);
       } catch (err) {
+        activeOutgoingFilePaths.delete(msgPath);
         msgRef.remove().catch(() => {});
         showToast('ส่งข้อความไม่สำเร็จ กรุณาลองใหม่', true);
       }
@@ -1773,14 +2025,16 @@
       const targetCode = activePeerInfo.code;
 
       for (const file of fileList) {
-        const fileId = crypto.randomUUID();
+        const fileId = safeUUID();
         const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
         const mime = resolveMimeType(file.name, file.type);
         const thumbDataUrl = await buildImageThumbnailDataUrl(file);
         const statusEl = appendSentFileItem(fileId, file.name, file.size);
 
-        const transferRef = db.ref(`inbox/${targetCode}/${fileId}`);
-        // ตั้งเวลาให้เซิร์ฟเวอร์ลบไฟล์นี้ออกทันทีหากปิดระบบหรือหลุดการเชื่อมต่อ
+        const transferPath = `inbox/${targetCode}/${fileId}`;
+        const transferRef = db.ref(transferPath);
+        activeOutgoingFilePaths.add(transferPath);
+        // ตั้งเวลาให้เซิร์ฟเวอร์ลบไฟล์นี้ออกทันทีหากปิดระบบหรือรีเฟรช
         transferRef.onDisconnect().remove();
 
         try {
@@ -1824,10 +2078,12 @@
 
           // ล้างไฟล์ออกจากฐานข้อมูลอัตโนมัติภายใน 2 นาทีเพื่อไม่ให้ฐานข้อมูลรับไฟล์สะสม
           setTimeout(() => {
+            activeOutgoingFilePaths.delete(transferPath);
             transferRef.remove().catch(() => {});
           }, 120000);
         } catch (err) {
           console.error('Upload error:', err);
+          activeOutgoingFilePaths.delete(transferPath);
           statusEl.textContent = 'ล้มเหลว';
           showToast(`ส่งไฟล์ ${file.name} ไม่สำเร็จ กรุณาลองใหม่`, true);
           transferRef.remove().catch(() => {});
