@@ -757,6 +757,8 @@
     let savedDirectoryHandle = null;
     let pendingClipboardText = null;
     let sharedAudioCtx = null;
+    let htmlAudioPlayer = null;
+    let audioUnlocked = false;
     let wakeLockSentinel = null;
     let lastResumeCheck = 0;
     let isAutoReconnecting = false;
@@ -781,13 +783,11 @@
       const isDark = themePreference === 'dark' || (themePreference === 'system' && systemDarkMedia.matches);
       document.documentElement.classList.toggle('dark', isDark);
 
-      // อัปเดตโลโก้ทุกจุดในหน้าเว็บตามสีพื้นหลัง
       const logoSrc = isDark ? LOGO_DARK_URL : LOGO_LIGHT_URL;
       document.querySelectorAll('.brand-logo-img').forEach(img => {
         if (img.src !== logoSrc) img.src = logoSrc;
       });
 
-      // อัปเดตปุ่มบน Header
       const sunIcon = document.getElementById('themeIconSun');
       const moonIcon = document.getElementById('themeIconMoon');
       const sysIcon = document.getElementById('themeIconSystem');
@@ -800,7 +800,6 @@
         label.textContent = themePreference === 'light' ? 'สีขาว' : themePreference === 'dark' ? 'สีดำ' : 'เริ่มต้น';
       }
 
-      // อัปเดตปุ่มเลือกในหน้าต่างตั้งค่า
       const optMap = {
         system: document.getElementById('themeOptSystem'),
         light: document.getElementById('themeOptLight'),
@@ -834,7 +833,6 @@
       if (themePreference === 'system') applyTheme();
     });
 
-    // ย่อลิงก์ให้สั้นและสะอาด
     function getShortDisplayUrl() {
       if (window.location.pathname.includes('/__vfs__/')) {
         return window.location.host;
@@ -884,22 +882,78 @@
       }, 3000);
     }
 
-    // ปลดล็อกระบบเสียงสำหรับ Safari บน iPadOS / iOS ทันทีที่ผู้ใช้แตะหน้าจอครั้งแรก
+    // สร้างไฟล์เสียง WAV ฝังในหน่วยความจำเพื่อให้ Safari บน iPad เล่นเสียงได้เสถียร
+    function createChimeWavDataUri(freq1, freq2) {
+      const sampleRate = 22050;
+      const duration = 0.28;
+      const numSamples = Math.floor(sampleRate * duration);
+      const buffer = new ArrayBuffer(44 + numSamples * 2);
+      const view = new DataView(buffer);
+
+      function writeStr(offset, str) {
+        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+      }
+
+      writeStr(0, 'RIFF');
+      view.setUint32(4, 36 + numSamples * 2, true);
+      writeStr(8, 'WAVE');
+      writeStr(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeStr(36, 'data');
+      view.setUint32(40, numSamples * 2, true);
+
+      for (let i = 0; i < numSamples; i++) {
+        const t = i / sampleRate;
+        const freq = t < 0.11 ? freq1 : freq2;
+        const env = Math.min(1, t / 0.015) * Math.exp(-t * 9);
+        const sample = Math.sin(2 * Math.PI * freq * t) * env * 0.45;
+        view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, sample)) * 32767, true);
+      }
+
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return 'data:audio/wav;base64,' + btoa(binary);
+    }
+
+    const RECEIVE_CHIME_URI = createChimeWavDataUri(587.33, 880);
+    const SEND_CHIME_URI = createChimeWavDataUri(523.25, 659.25);
+
     function unlockAudioContext() {
       try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtx) return;
-        if (!sharedAudioCtx) {
-          sharedAudioCtx = new AudioCtx();
+        if (AudioCtx) {
+          if (!sharedAudioCtx) sharedAudioCtx = new AudioCtx();
+          if (sharedAudioCtx.state === 'suspended') {
+            sharedAudioCtx.resume().catch(() => {});
+          }
+          if (!audioUnlocked) {
+            const buffer = sharedAudioCtx.createBuffer(1, 1, 22050);
+            const source = sharedAudioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(sharedAudioCtx.destination);
+            source.start(0);
+          }
         }
-        if (sharedAudioCtx.state === 'suspended') {
-          sharedAudioCtx.resume().catch(() => {});
+        if (!htmlAudioPlayer) {
+          htmlAudioPlayer = new Audio(RECEIVE_CHIME_URI);
+          htmlAudioPlayer.preload = 'auto';
         }
-        const buffer = sharedAudioCtx.createBuffer(1, 1, 22050);
-        const source = sharedAudioCtx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(sharedAudioCtx.destination);
-        source.start(0);
+        if (!audioUnlocked && htmlAudioPlayer) {
+          htmlAudioPlayer.volume = 0.01;
+          htmlAudioPlayer.play().then(() => {
+            htmlAudioPlayer.pause();
+            htmlAudioPlayer.currentTime = 0;
+            htmlAudioPlayer.volume = 1.0;
+            audioUnlocked = true;
+          }).catch(() => {});
+        }
       } catch (e) {}
     }
 
@@ -910,30 +964,29 @@
     async function playNotificationSound(mode = 'receive') {
       if (!appSettings.soundAlert) return;
       try {
+        if (!htmlAudioPlayer) htmlAudioPlayer = new Audio();
+        htmlAudioPlayer.src = mode === 'send' ? SEND_CHIME_URI : RECEIVE_CHIME_URI;
+        htmlAudioPlayer.volume = 1.0;
+        htmlAudioPlayer.currentTime = 0;
+        await htmlAudioPlayer.play();
+        return;
+      } catch (e) {}
+
+      try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (!AudioCtx) return;
-        if (!sharedAudioCtx) {
-          sharedAudioCtx = new AudioCtx();
-        }
-        if (sharedAudioCtx.state === 'suspended') {
-          await sharedAudioCtx.resume();
-        }
+        if (!sharedAudioCtx) sharedAudioCtx = new AudioCtx();
+        if (sharedAudioCtx.state === 'suspended') await sharedAudioCtx.resume();
 
         const now = sharedAudioCtx.currentTime;
         const osc = sharedAudioCtx.createOscillator();
         const gain = sharedAudioCtx.createGain();
         osc.type = 'sine';
-
-        if (mode === 'send') {
-          osc.frequency.setValueAtTime(523.25, now);
-          osc.frequency.setValueAtTime(659.25, now + 0.08);
-        } else {
-          osc.frequency.setValueAtTime(587.33, now);
-          osc.frequency.setValueAtTime(880, now + 0.09);
-        }
+        osc.frequency.setValueAtTime(mode === 'send' ? 523.25 : 587.33, now);
+        osc.frequency.setValueAtTime(mode === 'send' ? 659.25 : 880, now + 0.09);
 
         gain.gain.setValueAtTime(0.001, now);
-        gain.gain.linearRampToValueAtTime(0.16, now + 0.015);
+        gain.gain.linearRampToValueAtTime(0.2, now + 0.015);
         gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.36);
 
         osc.connect(gain);
@@ -943,7 +996,6 @@
       } catch (e) {}
     }
 
-    // ป้องกันหน้าจอพักเองขณะเปิดหน้าเว็บค้างไว้
     async function requestScreenWakeLock() {
       try {
         if ('wakeLock' in navigator && !document.hidden) {
@@ -952,7 +1004,6 @@
       } catch (e) {}
     }
 
-    // กู้คืนการเชื่อมต่อทันทีเมื่อสลับแท็บหรือกลับเข้าแอป Safari
     function handleResumeFromBackground() {
       if (document.hidden) return;
 
@@ -986,7 +1037,6 @@
         syncFirebasePresence(true);
       }
 
-      // ถ้าเคยเชื่อมต่อกับอีกเครื่องค้างไว้ก่อนสลับแอป ให้ต่อกลับให้อัตโนมัติ
       if (activeConn && !activeConn.open) {
         resetSessionUI(true);
       }
@@ -1004,7 +1054,6 @@
     window.addEventListener('focus', handleResumeFromBackground);
     window.addEventListener('pageshow', handleResumeFromBackground);
 
-    // ส่งสัญญาณประคองสายทุก 4 วินาทีไม่ให้ WebRTC หลุดง่าย
     setInterval(() => {
       if (activeConn && activeConn.open) {
         try {
@@ -1339,7 +1388,7 @@
         showToast(`กำลังเชื่อมต่อกับ ${targetName}...`);
       }
 
-      const conn = peer.connect(targetPeerId);
+      const conn = peer.connect(targetPeerId, { reliable: true });
       conn.on('open', () => {
         conn.send({
           type: 'handshake-hello',
@@ -1582,7 +1631,7 @@
     }
 
     // ==========================================
-    // 7. การส่งและรับไฟล์ (16KB Stream) + ข้อความ
+    // 7. การส่งและรับไฟล์ (Base64 Safe Stream) + ข้อความ
     // ==========================================
     function resolveMimeType(filename, rawMime) {
       if (rawMime && rawMime !== 'application/octet-stream') return rawMime;
@@ -1598,8 +1647,29 @@
       return map[ext] || rawMime || 'application/octet-stream';
     }
 
-    function normalizeChunkToUint8Array(rawChunk) {
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      const step = 8192;
+      for (let i = 0; i < bytes.length; i += step) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+      }
+      return btoa(binary);
+    }
+
+    function base64ToUint8Array(b64) {
+      const binary = atob(b64);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    }
+
+    function decodeIncomingChunk(rawChunk) {
       if (!rawChunk) return new Uint8Array(0);
+      if (typeof rawChunk === 'string') return base64ToUint8Array(rawChunk);
       if (rawChunk instanceof Uint8Array) return rawChunk;
       if (rawChunk instanceof ArrayBuffer) return new Uint8Array(rawChunk);
       if (ArrayBuffer.isView(rawChunk)) {
@@ -1614,6 +1684,15 @@
         }
       }
       return new Uint8Array(0);
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => resolve(URL.createObjectURL(blob));
+        reader.readAsDataURL(blob);
+      });
     }
 
     async function pasteFromClipboard() {
@@ -1668,13 +1747,13 @@
           const start = i * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, file.size);
           const buffer = await file.slice(start, end).arrayBuffer();
-          const chunk = new Uint8Array(buffer);
+          const b64Chunk = arrayBufferToBase64(buffer);
 
           activeConn.send({
             type: 'file-chunk',
             fileId,
             index: i,
-            chunk
+            b64: b64Chunk
           });
 
           if (i % 12 === 0 || i === totalChunks - 1) {
@@ -1723,7 +1802,7 @@
       } else if (data.type === 'file-chunk') {
         const record = incomingFiles[data.fileId];
         if (!record) return;
-        record.chunks[data.index] = normalizeChunkToUint8Array(data.chunk);
+        record.chunks[data.index] = decodeIncomingChunk(data.b64 || data.chunk);
         record.receivedCount++;
         if (record.receivedCount % 12 === 0 || record.receivedCount === record.meta.totalChunks) {
           const pct = Math.round((record.receivedCount / record.meta.totalChunks) * 100);
@@ -1738,6 +1817,12 @@
         const blob = new Blob(safeChunks, { type: record.meta.mime });
         const blobUrl = URL.createObjectURL(blob);
 
+        // สร้าง Data URL สำหรับรูปภาพเพื่อให้ Safari แสดงภาพตัวอย่างได้อย่างแม่นยำ
+        let previewUrl = blobUrl;
+        if (record.meta.mime.startsWith('image/') && blob.size <= 15 * 1024 * 1024) {
+          previewUrl = await blobToDataUrl(blob);
+        }
+
         if (savedDirectoryHandle) {
           try {
             const fileHandle = await savedDirectoryHandle.getFileHandle(record.meta.name, { create: true });
@@ -1751,14 +1836,14 @@
           triggerAutoDownload(blobUrl, record.meta.name);
         }
 
-        finalizeReceivedFileItem(record.statusEl, record.meta, blobUrl);
+        finalizeReceivedFileItem(record.statusEl, record.meta, previewUrl, blobUrl);
 
         receivedStats.count++;
         receivedStats.bytes += record.meta.size;
         updateReceivedSummary();
 
         if (appSettings.autoPreview) {
-          openPreviewModal(record.meta.name, record.meta.mime, blobUrl);
+          openPreviewModal(record.meta.name, record.meta.mime, previewUrl, blobUrl);
         }
 
         delete incomingFiles[data.fileId];
@@ -1809,7 +1894,7 @@
       return document.getElementById(`recv_status_${id}`);
     }
 
-    function finalizeReceivedFileItem(statusEl, meta, blobUrl) {
+    function finalizeReceivedFileItem(statusEl, meta, previewUrl, downloadUrl) {
       const id = meta.fileId;
       const sender = activePeerInfo?.name || 'อุปกรณ์';
       const timeStr = getCurrentTimeStr();
@@ -1823,7 +1908,7 @@
       const thumbEl = document.getElementById(`recv_thumb_${id}`);
       if (thumbEl && meta.mime.startsWith('image/')) {
         const img = document.createElement('img');
-        img.src = blobUrl;
+        img.src = previewUrl;
         img.className = 'w-full h-full object-cover';
         img.alt = meta.name;
         img.onerror = () => {
@@ -1846,7 +1931,7 @@
       const row = document.getElementById(`recv_row_${id}`);
       if (row) {
         row.classList.add('cursor-pointer', 'hover:border-teal-500');
-        row.onclick = () => openPreviewModal(meta.name, meta.mime, blobUrl);
+        row.onclick = () => openPreviewModal(meta.name, meta.mime, previewUrl, downloadUrl || previewUrl);
       }
     }
 
@@ -1968,23 +2053,23 @@
     // ==========================================
     // 9. หน้าต่างดูตัวอย่างไฟล์เต็มจอ (Preview Modal)
     // ==========================================
-    function openPreviewModal(filename, mime, url) {
+    function openPreviewModal(filename, mime, previewUrl, downloadUrl) {
       const modal = document.getElementById('previewModal');
       const body = document.getElementById('previewBody');
       const dlBtn = document.getElementById('previewDownloadBtn');
 
       document.getElementById('previewFileName').textContent = filename;
-      dlBtn.href = url;
+      dlBtn.href = downloadUrl || previewUrl;
       dlBtn.download = filename;
 
       if (mime.startsWith('image/')) {
-        body.innerHTML = `<img src="${url}" class="max-h-[82vh] max-w-full rounded-xl object-contain shadow-2xl" alt="${escapeHtml(filename)}" />`;
+        body.innerHTML = `<img src="${previewUrl}" class="max-h-[82vh] max-w-full rounded-xl object-contain shadow-2xl" alt="${escapeHtml(filename)}" />`;
       } else if (mime.startsWith('video/')) {
-        body.innerHTML = `<video src="${url}" controls autoplay playsinline class="max-h-[82vh] max-w-full rounded-xl shadow-2xl"></video>`;
+        body.innerHTML = `<video src="${previewUrl}" controls autoplay playsinline class="max-h-[82vh] max-w-full rounded-xl shadow-2xl"></video>`;
       } else if (mime.startsWith('audio/')) {
-        body.innerHTML = `<div class="bg-[#13171c] border border-[#1f252d] p-6 rounded-2xl w-full max-w-md text-center"><p class="text-sm text-white mb-4">${escapeHtml(filename)}</p><audio src="${url}" controls autoplay class="w-full"></audio></div>`;
+        body.innerHTML = `<div class="bg-[#13171c] border border-[#1f252d] p-6 rounded-2xl w-full max-w-md text-center"><p class="text-sm text-white mb-4">${escapeHtml(filename)}</p><audio src="${previewUrl}" controls autoplay class="w-full"></audio></div>`;
       } else if (mime === 'application/pdf') {
-        body.innerHTML = `<iframe src="${url}" class="w-full h-[82vh] rounded-xl bg-white"></iframe>`;
+        body.innerHTML = `<iframe src="${previewUrl}" class="w-full h-[82vh] rounded-xl bg-white"></iframe>`;
       } else {
         body.innerHTML = `
           <div class="bg-[#13171c] border border-[#1f252d] p-8 rounded-2xl text-center max-w-sm">
@@ -2078,6 +2163,9 @@
       appSettings[key] = !appSettings[key];
       localStorage.setItem('dp_settings', JSON.stringify(appSettings));
       syncSettingsUI();
+      if (key === 'soundAlert' && appSettings.soundAlert) {
+        playNotificationSound('receive');
+      }
     }
 
     function syncSettingsUI() {
