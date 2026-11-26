@@ -259,8 +259,8 @@
       <ol class="mt-4 space-y-3 text-xs text-sec leading-relaxed list-decimal list-inside">
         <li>เปิดหน้าเว็บนี้บนทั้งสองเครื่องที่ต้องการส่งข้อมูลหากัน</li>
         <li>สแกน QR Code หรือนำรหัส 6 หลักของเครื่องรับไปกรอกในแท็บ <strong class="text-accent">ส่งไฟล์</strong> ของอีกเครื่อง</li>
-        <li>เลือกไฟล์ รูปภาพ วิดีโอขนาดใหญ่ หรือพิมพ์ข้อความเพื่อส่งระหว่างเครื่องได้ทันที</li>
-        <li>กด <strong class="text-accent">จำไว้</strong> เพื่อให้ครั้งหน้าเห็นชื่อเครื่องและเชื่อมต่อได้ทันทีโดยไม่ต้องใส่รหัสใหม่</li>
+        <li>เลือกไฟล์ รูปภาพ วิดีโอ เอกสาร หรือพิมพ์ข้อความเพื่อส่งระหว่างเครื่องได้ทันที</li>
+        <li>ข้อมูลทุกประเภทจะถูกลบออกจากระบบทันทีที่ส่งถึงปลายทาง และล้างทั้งหมดเมื่อรีเฟรชหรือปิดหน้าเว็บ</li>
       </ol>
       <button onclick="toggleHelpModal(false)" class="mt-5 w-full teal-btn text-xs font-medium py-2.5 rounded-xl transition">
         เริ่มใช้งาน
@@ -471,7 +471,7 @@
             </div>
             <div>
               <h2 class="text-sm font-semibold text-main">รอรับไฟล์อยู่นะ</h2>
-              <p class="text-xs text-dim">เปิดหน้านี้ค้างไว้ได้เลย</p>
+              <p class="text-xs text-dim">เปิดหน้านี้ค้างไว้ได้เลย · ล้างข้อมูลอัตโนมัติเมื่อออก</p>
             </div>
           </div>
 
@@ -613,7 +613,7 @@
               <img class="brand-logo-img w-full h-full object-contain" src="https://i.postimg.cc/VvBWWhJq/N.png" alt="Dropple" />
             </div>
             <p class="text-sm font-semibold text-main">แตะเพื่อเลือกไฟล์</p>
-            <p class="text-xs text-dim mt-1">รูป วิดีโอ หรือไฟล์ขนาดใหญ่ · เลือกได้หลายไฟล์</p>
+            <p class="text-xs text-dim mt-1">รูป วิดีโอ เอกสาร หรือไฟล์ทุกประเภท · ไม่เก็บถาวร</p>
           </div>
 
           <div class="card-surface rounded-2xl p-4">
@@ -695,7 +695,8 @@
     // ==========================================
     // 2. ตัวแปรระบบ, ธีม และโลโก้
     // ==========================================
-    const CHUNK_SIZE = 65536; // 64KB ต่อก้อน รองรับไฟล์ขนาดใหญ่ได้เสถียร 100%
+    const CHUNK_SIZE = 65536; // 64KB ต่อก้อน ส่งไฟล์ทุกประเภทและไฟล์ขนาดใหญ่ได้เสถียร 100%
+    const STALE_ITEM_TTL_MS = 3 * 60 * 1000; // ล้างรายการตกค้างเกิน 3 นาทีอัตโนมัติ
     const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const LOGO_LIGHT_URL = 'https://i.postimg.cc/GpWPwRG0/N.png';
     const LOGO_DARK_URL = 'https://i.postimg.cc/VvBWWhJq/N.png';
@@ -723,6 +724,8 @@
     let sentStats = { count: 0, bytes: 0 };
     const incomingTransfers = {};
     const processedTransfers = new Set();
+    const activeOutgoingRefs = new Set();
+    const createdObjectUrls = new Set();
 
     const myToken = localStorage.getItem('dp_token') || crypto.randomUUID();
     localStorage.setItem('dp_token', myToken);
@@ -986,9 +989,37 @@
     window.addEventListener('pageshow', handleResumeFromBackground);
 
     // ==========================================
-    // 3. ป้องกันเปิดซ้ำหลายแท็บ
+    // 3. ระบบล้างข้อมูลอัตโนมัติเมื่อรีเฟรชหรือออกจากหน้าเว็บ (Zero Persistence)
     // ==========================================
-    const tabChannel = new BroadcastChannel('dropple_natchanon_guard_v3');
+    function purgeAllSessionDataOnExit() {
+      try {
+        if (myCode) {
+          db.ref(`inbox/${myCode}`).remove().catch(() => {});
+          db.ref(`signals/${myCode}`).remove().catch(() => {});
+          db.ref(`codes/${myCode}`).remove().catch(() => {});
+        }
+        if (wifiRoomKey && myToken) {
+          db.ref(`wifi_rooms/${wifiRoomKey}/${myToken}`).remove().catch(() => {});
+        }
+        activeOutgoingRefs.forEach(ref => {
+          ref.remove().catch(() => {});
+        });
+        activeOutgoingRefs.clear();
+
+        createdObjectUrls.forEach(url => {
+          try { URL.revokeObjectURL(url); } catch (e) {}
+        });
+        createdObjectUrls.clear();
+      } catch (e) {}
+    }
+
+    window.addEventListener('pagehide', purgeAllSessionDataOnExit);
+    window.addEventListener('beforeunload', purgeAllSessionDataOnExit);
+
+    // ==========================================
+    // 4. ป้องกันเปิดซ้ำหลายแท็บ
+    // ==========================================
+    const tabChannel = new BroadcastChannel('dropple_natchanon_guard_v4');
     tabChannel.postMessage({ type: 'ping' });
     tabChannel.onmessage = (e) => {
       if (e.data.type === 'ping') {
@@ -1006,7 +1037,7 @@
     }
 
     // ==========================================
-    // 4. ยืนยันตัวตน Firebase และระบบลงทะเบียนห้องรับส่ง
+    // 5. ยืนยันตัวตน Firebase และระบบลงทะเบียนห้องรับส่งชั่วคราว
     // ==========================================
     async function ensureFirebaseAuth() {
       if (auth.currentUser) {
@@ -1038,6 +1069,17 @@
 
       const uid = await ensureFirebaseAuth();
       if (!uid) return;
+
+      // ล้างรหัสและไฟล์ตกค้างจากรอบก่อนหน้าทันทีที่เปิดหน้าใหม่หรือรีเฟรช
+      const prevCode = sessionStorage.getItem('dp_active_code');
+      if (prevCode) {
+        await Promise.all([
+          db.ref(`inbox/${prevCode}`).remove().catch(() => {}),
+          db.ref(`signals/${prevCode}`).remove().catch(() => {}),
+          db.ref(`codes/${prevCode}`).remove().catch(() => {})
+        ]);
+        sessionStorage.removeItem('dp_active_code');
+      }
 
       await syncFirebasePresence(false);
       checkUrlCodeParam();
@@ -1077,11 +1119,18 @@
         if (oldCode) {
           db.ref(`inbox/${oldCode}`).off();
           db.ref(`signals/${oldCode}`).off();
-          await db.ref(`codes/${oldCode}`).remove().catch(() => {});
-          await db.ref(`inbox/${oldCode}`).remove().catch(() => {});
-          await db.ref(`signals/${oldCode}`).remove().catch(() => {});
+          await Promise.all([
+            db.ref(`codes/${oldCode}`).remove().catch(() => {}),
+            db.ref(`inbox/${oldCode}`).remove().catch(() => {}),
+            db.ref(`signals/${oldCode}`).remove().catch(() => {})
+          ]);
         }
         myCode = generateRandomCode();
+        sessionStorage.setItem('dp_active_code', myCode);
+        await Promise.all([
+          db.ref(`inbox/${myCode}`).remove().catch(() => {}),
+          db.ref(`signals/${myCode}`).remove().catch(() => {})
+        ]);
       }
 
       document.getElementById('myPairingCode').textContent = myCode;
@@ -1089,6 +1138,9 @@
       document.getElementById('inlineCodeHint').textContent = myCode;
 
       const codeRef = db.ref(`codes/${myCode}`);
+      const inboxRef = db.ref(`inbox/${myCode}`);
+      const signalsRef = db.ref(`signals/${myCode}`);
+
       await codeRef.set({
         code: myCode,
         deviceName: myDeviceName,
@@ -1096,9 +1148,10 @@
         ownerUid: uid,
         timestamp: firebase.database.ServerValue.TIMESTAMP
       });
+
       codeRef.onDisconnect().remove();
-      db.ref(`inbox/${myCode}`).onDisconnect().remove();
-      db.ref(`signals/${myCode}`).onDisconnect().remove();
+      inboxRef.onDisconnect().remove();
+      signalsRef.onDisconnect().remove();
 
       listenForIncomingSignals(myCode);
       listenForIncomingInbox(myCode);
@@ -1128,7 +1181,7 @@
 
     function regenerateCode() {
       registerPairingCode(false, currentAuthUid);
-      showToast('เปลี่ยนรหัสรับไฟล์ใหม่แล้ว');
+      showToast('เปลี่ยนรหัสและล้างห้องรับส่งเดิมแล้ว');
     }
 
     function copyShareLink() {
@@ -1188,7 +1241,7 @@
     }
 
     // ==========================================
-    // 5. การจับคู่ผ่าน Firebase Signals (5G ↔ Wi-Fi เชื่อมได้ 100%)
+    // 6. การจับคู่ผ่าน Firebase Signals
     // ==========================================
     function setupCodeBoxes() {
       const boxes = document.querySelectorAll('.code-box');
@@ -1272,6 +1325,7 @@
         showToast(`กำลังเชื่อมต่อกับ ${target.deviceName}...`);
         const reqId = crypto.randomUUID();
         const reqRef = db.ref(`signals/${code}/${reqId}`);
+        reqRef.onDisconnect().remove();
 
         await reqRef.set({
           type: 'handshake-hello',
@@ -1487,7 +1541,7 @@
     }
 
     // ==========================================
-    // 6. การสลับแท็บ (รับไฟล์ / ส่งไฟล์)
+    // 7. การสลับแท็บ (รับไฟล์ / ส่งไฟล์)
     // ==========================================
     function switchTab(tab) {
       const receiveBtn = document.getElementById('tabReceiveBtn');
@@ -1513,7 +1567,7 @@
     }
 
     // ==========================================
-    // 7. การส่งและรับไฟล์ขนาดใหญ่ 100% (Firebase RTDB Streaming)
+    // 8. การส่งและรับไฟล์ทุกประเภทแบบชั่วคราว (ลบข้อมูลทันทีหลังส่งถึงและเมื่อรีเฟรช)
     // ==========================================
     function resolveMimeType(filename, rawMime) {
       if (rawMime && rawMime !== 'application/octet-stream') return rawMime;
@@ -1522,9 +1576,13 @@
         jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
         gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
         heic: 'image/heic', heif: 'image/heif', bmp: 'image/bmp',
-        mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
-        mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg',
-        pdf: 'application/pdf', txt: 'text/plain', zip: 'application/zip'
+        mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska',
+        mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg', flac: 'audio/flac',
+        pdf: 'application/pdf', txt: 'text/plain', csv: 'text/csv', json: 'application/json',
+        zip: 'application/zip', rar: 'application/vnd.rar', '7z': 'application/x-7z-compressed',
+        doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
       };
       return map[ext] || rawMime || 'application/octet-stream';
     }
@@ -1536,6 +1594,10 @@
       if (firstChunk[0] === 0x47 && firstChunk[1] === 0x49 && firstChunk[2] === 0x46) return 'image/gif';
       if (firstChunk[0] === 0x52 && firstChunk[1] === 0x49 && firstChunk[2] === 0x46 && firstChunk[3] === 0x46 &&
           firstChunk[8] === 0x57 && firstChunk[9] === 0x45 && firstChunk[10] === 0x42 && firstChunk[11] === 0x50) return 'image/webp';
+      if (firstChunk[0] === 0x25 && firstChunk[1] === 0x50 && firstChunk[2] === 0x44 && firstChunk[3] === 0x46) return 'application/pdf';
+      if (firstChunk[0] === 0x50 && firstChunk[1] === 0x4B && firstChunk[2] === 0x03 && firstChunk[3] === 0x04) {
+        if (fallbackMime === 'application/octet-stream') return 'application/zip';
+      }
       if (firstChunk[4] === 0x66 && firstChunk[5] === 0x74 && firstChunk[6] === 0x79 && firstChunk[7] === 0x70) {
         const brand = String.fromCharCode(firstChunk[8], firstChunk[9], firstChunk[10], firstChunk[11]).toLowerCase();
         if (['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand)) return 'image/heic';
@@ -1645,8 +1707,12 @@
       const msgId = crypto.randomUUID();
       input.value = '';
 
+      const msgRef = db.ref(`inbox/${activePeerInfo.code}/${msgId}`);
+      activeOutgoingRefs.add(msgRef);
+      msgRef.onDisconnect().remove();
+
       try {
-        await writeFirebaseWithRetry(db.ref(`inbox/${activePeerInfo.code}/${msgId}`), {
+        await writeFirebaseWithRetry(msgRef, {
           id: msgId,
           type: 'text-message',
           senderCode: myCode,
@@ -1657,6 +1723,8 @@
         playNotificationSound('send');
         appendSentTextItem(text);
       } catch (err) {
+        activeOutgoingRefs.delete(msgRef);
+        msgRef.remove().catch(() => {});
         showToast('ส่งข้อความไม่สำเร็จ กรุณาลองใหม่', true);
       }
     }
@@ -1673,9 +1741,10 @@
         const statusEl = appendSentFileItem(fileId, file.name, file.size);
 
         const transferRef = db.ref(`inbox/${targetCode}/${fileId}`);
+        activeOutgoingRefs.add(transferRef);
+        transferRef.onDisconnect().remove();
 
         try {
-          // 1. สร้างข้อมูลหัวไฟล์ให้ฝั่งรับเริ่มรอรับก้อนข้อมูลทันที
           await writeFirebaseWithRetry(transferRef, {
             id: fileId,
             type: 'file-transfer',
@@ -1690,7 +1759,6 @@
             timestamp: firebase.database.ServerValue.TIMESTAMP
           });
 
-          // 2. ส่งก้อนข้อมูลทีละก้อน (64KB) แบบเรียงลำดับ ไม่กิน RAM และรองรับไฟล์ขนาดใหญ่ 100%
           for (let i = 0; i < totalChunks; i++) {
             const start = i * CHUNK_SIZE;
             const end = Math.min(start + CHUNK_SIZE, file.size);
@@ -1703,8 +1771,8 @@
             statusEl.textContent = `${pct}%`;
           }
 
-          // 3. ยืนยันว่าอัปโหลดครบทุกก้อนแล้ว
           await transferRef.update({ completed: true });
+          activeOutgoingRefs.delete(transferRef);
 
           playNotificationSound('send');
           statusEl.innerHTML = `
@@ -1715,8 +1783,14 @@
           sentStats.count++;
           sentStats.bytes += file.size;
           updateSentSummary();
+
+          // ระบบสำรองล้างข้อมูลฝั่งส่งหากปลายทางตัดการเชื่อมต่อก่อนลบเอง (ภายใน 90 วินาที)
+          setTimeout(() => {
+            transferRef.remove().catch(() => {});
+          }, 90000);
         } catch (err) {
           console.error('Upload error:', err);
+          activeOutgoingRefs.delete(transferRef);
           statusEl.textContent = 'ล้มเหลว';
           showToast(`ส่งไฟล์ ${file.name} ไม่สำเร็จ กรุณาลองใหม่`, true);
           transferRef.remove().catch(() => {});
@@ -1734,9 +1808,15 @@
         const item = snap.val();
         if (!item || !item.id || processedTransfers.has(item.id)) return;
 
-        // กรณีได้รับข้อความ
+        // ลบทิ้งทันทีหากเป็นข้อมูลตกค้างเกินกำหนด
+        if (typeof item.timestamp === 'number' && (Date.now() - item.timestamp > STALE_ITEM_TTL_MS)) {
+          snap.ref.remove().catch(() => {});
+          return;
+        }
+
         if (item.type === 'text-message') {
           processedTransfers.add(item.id);
+          // ลบข้อความออกจากฐานข้อมูลทันทีที่อ่านเสร็จ
           snap.ref.remove().catch(() => {});
 
           playNotificationSound('receive');
@@ -1753,7 +1833,6 @@
           return;
         }
 
-        // กรณีได้รับไฟล์ (ทั้งไฟล์เล็กและไฟล์ขนาดใหญ่)
         if (item.type === 'file-transfer') {
           if (incomingTransfers[item.id]) return;
 
@@ -1785,7 +1864,6 @@
           };
           incomingTransfers[item.id] = record;
 
-          // รับก้อนข้อมูลแบบเรียลไทม์ทีละก้อนที่อัปโหลดเข้ามา
           const chunksRef = snap.ref.child('chunks');
           chunksRef.on('child_added', (chunkSnap) => {
             const idx = parseInt(chunkSnap.key, 10);
@@ -1802,7 +1880,6 @@
             }
           });
 
-          // เผื่อกรณีไฟล์เล็กมากที่ส่งเสร็จตั้งแต่ก่อนเปิด listener
           if (item.completed && !record.isFinalizing) {
             const fullSnap = await snap.ref.child('chunks').once('value');
             fullSnap.forEach((cSnap) => {
@@ -1830,6 +1907,9 @@
         record.ref.child('chunks').off();
       } catch (e) {}
 
+      // ลบไฟล์และก้อนข้อมูลทั้งหมดออกจากฐานข้อมูลทันทีที่รับครบ 100%
+      await record.ref.remove().catch(() => {});
+
       playNotificationSound('receive');
 
       const safeChunks = record.chunks.map(c => c || new Uint8Array(0));
@@ -1838,9 +1918,8 @@
 
       const blob = new Blob(safeChunks, { type: realMime });
       const blobUrl = URL.createObjectURL(blob);
+      createdObjectUrls.add(blobUrl);
 
-      // สำหรับไฟล์ <= 15MB แปลงเป็น Data URL เพื่อให้ Safari ดาวน์โหลดได้ชัวร์
-      // สำหรับไฟล์ใหญ่ > 15MB ใช้ Blob URL และเก็บไว้ในหน่วยความจำ 10 นาทีไม่ให้ Safari ตัดลิงก์
       let safeDataUrl = null;
       if (blob.size <= 15 * 1024 * 1024) {
         safeDataUrl = await blobToDataUrl(blob);
@@ -1874,8 +1953,6 @@
         openPreviewModal(record.meta.name, realMime, previewUrl, downloadHref);
       }
 
-      // ลบข้อมูลชั่วคราวออกจาก Firebase RTDB ทันทีหลังรับครบ 100%
-      record.ref.remove().catch(() => {});
       delete incomingTransfers[record.id];
     }
 
@@ -1890,7 +1967,7 @@
     }
 
     // ==========================================
-    // 8. การแสดงผลรายการไฟล์และข้อความ
+    // 9. การแสดงผลรายการไฟล์และข้อความ
     // ==========================================
     function getCurrentTimeStr() {
       const now = new Date();
@@ -2090,7 +2167,7 @@
     }
 
     // ==========================================
-    // 9. หน้าต่างดูตัวอย่างไฟล์เต็มจอ (Preview Modal)
+    // 10. หน้าต่างดูตัวอย่างไฟล์เต็มจอ (Preview Modal)
     // ==========================================
     function openPreviewModal(filename, mime, previewUrl, downloadUrl) {
       const modal = document.getElementById('previewModal');
@@ -2130,7 +2207,7 @@
     }
 
     // ==========================================
-    // 10. Drag & Drop และ Clipboard Paste
+    // 11. Drag & Drop และ Clipboard Paste
     // ==========================================
     const dropZone = document.getElementById('dropZone');
     dropZone.addEventListener('dragover', (e) => {
@@ -2157,7 +2234,7 @@
     });
 
     // ==========================================
-    // 11. การจัดการหน้าต่างตั้งค่า, โฟลเดอร์, และ Modals
+    // 12. การจัดการหน้าต่างตั้งค่า, โฟลเดอร์, และ Modals
     // ==========================================
     function toggleSettings(show) {
       const modal = document.getElementById('settingsModal');
