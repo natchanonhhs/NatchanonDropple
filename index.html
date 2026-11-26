@@ -11,10 +11,10 @@
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>
-    // สร้างไอคอน PNG Data URL ให้ Safari แสดงบนแท็บทันทีและโหลดภาพจากลิงก์มาอัปเดตทับ
     (function() {
       function applySafariIcons(dataUrl) {
         ['faviconLink', 'shortcutIconLink', 'appleTouchIconLink'].forEach(function(id) {
@@ -55,7 +55,6 @@
       } catch (e) {}
     })();
 
-    // ตั้งค่าธีมล่วงหน้าก่อนเรนเดอร์เพื่อไม่ให้หน้าจอกระพริบ
     (function() {
       const savedTheme = localStorage.getItem('dp_theme') || 'system';
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -189,10 +188,8 @@
 </head>
 <body class="min-h-screen flex flex-col justify-between selection:bg-teal-500/30 selection:text-teal-600 dark:selection:text-teal-200">
 
-  <!-- Toast แจ้งเตือนมุมขวาล่าง -->
   <div id="toastContainer" class="fixed bottom-16 right-4 z-50 flex flex-col gap-2 max-w-xs w-full pointer-events-none"></div>
 
-  <!-- แจ้งเตือนเปิดซ้ำหลายแท็บ -->
   <div id="duplicateTabOverlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
     <div class="card-surface rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
       <div class="w-12 h-12 rounded-xl logo-container p-2 flex items-center justify-center mx-auto mb-4">
@@ -206,7 +203,6 @@
     </div>
   </div>
 
-  <!-- หน้าต่างยืนยันการรับการเชื่อมต่อ (กรณีทักผ่าน Wi-Fi โดยไม่ใช้รหัส) -->
   <div id="incomingRequestModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
     <div class="card-surface rounded-2xl max-w-sm w-full p-6 shadow-2xl">
       <div class="flex items-center justify-between">
@@ -232,7 +228,6 @@
     </div>
   </div>
 
-  <!-- หน้าต่างแสดง QR Code (เมื่อกด "แสดง QR" ตอนเชื่อมต่ออยู่) -->
   <div id="qrModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
     <div class="card-surface rounded-2xl max-w-xs w-full p-6 text-center shadow-2xl relative">
       <button onclick="toggleQrModal(false)" class="absolute top-4 right-4 text-dim hover:text-main p-1">
@@ -249,7 +244,6 @@
     </div>
   </div>
 
-  <!-- หน้าต่างวิธีใช้ (ปุ่ม ?) -->
   <div id="helpModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
     <div class="card-surface rounded-2xl max-w-md w-full p-6 shadow-2xl">
       <div class="flex items-center justify-between pb-3 border-b border-main">
@@ -272,7 +266,6 @@
     </div>
   </div>
 
-  <!-- หน้าต่างตั้งค่า (Settings Modal) -->
   <div id="settingsModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
     <div class="card-surface rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between pb-3">
@@ -284,7 +277,6 @@
         </button>
       </div>
 
-      <!-- ธีมการแสดงผล -->
       <div class="mt-2">
         <label class="block text-xs font-medium text-sec mb-2">ธีมหน้าเว็บ</label>
         <div class="grid grid-cols-3 gap-2 sub-surface p-1 rounded-xl">
@@ -303,7 +295,6 @@
         </div>
       </div>
 
-      <!-- ชื่อเครื่องนี้ -->
       <div class="mt-5">
         <label class="block text-xs font-medium text-sec mb-2">ชื่อเครื่องนี้</label>
         <input type="text" id="deviceNameInput" onchange="saveDeviceName()" onblur="saveDeviceName()"
@@ -311,13 +302,11 @@
         <p class="text-[11px] text-dim mt-1.5">เครื่องอื่นใน Wi-Fi เดียวกันจะเห็นชื่อนี้</p>
       </div>
 
-      <!-- เครื่องที่จำไว้ -->
       <div class="mt-5">
         <label class="block text-xs font-medium text-sec mb-1.5">เครื่องที่จำไว้</label>
         <div id="trustedList" class="space-y-2 text-xs text-dim"></div>
       </div>
 
-      <!-- บันทึกไฟล์ที่ -->
       <div class="mt-5">
         <label class="block text-xs font-medium text-sec mb-2">บันทึกไฟล์ที่</label>
         <button onclick="pickSaveDirectory()" class="w-full sub-surface hover:border-teal-500 rounded-xl px-3.5 py-2.5 flex items-center gap-2.5 text-left transition">
@@ -329,9 +318,7 @@
         <p class="text-[11px] text-dim mt-1.5">เครื่องนี้จะเก็บไฟล์ไว้ในดาวน์โหลดของเบราว์เซอร์</p>
       </div>
 
-      <!-- สวิตช์ตั้งค่า 3 รายการ -->
       <div class="mt-5 pt-4 border-t border-main space-y-4">
-        <!-- 1. เปิดดูไฟล์ทันทีที่ได้รับ -->
         <div class="flex items-center justify-between gap-4">
           <div>
             <div class="text-xs font-medium text-main">เปิดดูไฟล์ทันทีที่ได้รับ</div>
@@ -343,7 +330,6 @@
           </button>
         </div>
 
-        <!-- 2. คัดลอกข้อความที่ได้รับทันที -->
         <div class="flex items-center justify-between gap-4">
           <div>
             <div class="text-xs font-medium text-main">คัดลอกข้อความที่ได้รับทันที</div>
@@ -355,7 +341,6 @@
           </button>
         </div>
 
-        <!-- 3. เสียงแจ้งเตือน -->
         <div class="flex items-center justify-between gap-4">
           <div>
             <div class="text-xs font-medium text-main">เสียงแจ้งเตือน</div>
@@ -370,7 +355,6 @@
     </div>
   </div>
 
-  <!-- หน้าต่างแสดงตัวอย่างไฟล์เต็มจอ (Preview Modal) -->
   <div id="previewModal" class="fixed inset-0 bg-black/95 z-50 hidden flex-col">
     <div class="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-[#1f252d] bg-[#0b0e11]">
       <span id="previewFileName" class="text-sm font-medium text-white truncate pr-4">filename.png</span>
@@ -388,7 +372,6 @@
     <div id="previewBody" class="flex-1 flex items-center justify-center p-4 overflow-auto"></div>
   </div>
 
-  <!-- แถบแจ้งเตือนด้านล่างสำหรับกด "จำเครื่องนี้ไว้ไหม" -->
   <div id="rememberBar" class="fixed bottom-11 left-1/2 -translate-x-1/2 z-30 hidden max-w-xl w-[calc(100%-2rem)]">
     <div class="card-surface rounded-2xl px-4 py-2.5 shadow-2xl flex items-center justify-between gap-3">
       <p class="text-xs text-sec truncate">
@@ -407,10 +390,8 @@
     </div>
   </div>
 
-  <!-- Main Wrapper -->
   <div class="w-full max-w-5xl mx-auto px-4 pt-4 pb-16 flex-1 flex flex-col">
 
-    <!-- Header Bar -->
     <header class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl logo-container p-1.5 flex items-center justify-center shrink-0 overflow-hidden">
@@ -459,7 +440,6 @@
       </div>
     </header>
 
-    <!-- Segmented Tab Control (รับไฟล์ / ส่งไฟล์) -->
     <div class="mb-5">
       <div class="card-surface p-1 rounded-2xl grid grid-cols-2 md:inline-grid md:w-80">
         <button id="tabReceiveBtn" onclick="switchTab('receive')"
@@ -479,12 +459,8 @@
       </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- VIEW 1: แท็บ "รับไฟล์" -->
-    <!-- ========================================== -->
     <div id="receiveView" class="grid grid-cols-1 md:grid-cols-12 gap-5 flex-1 items-start">
 
-      <!-- การ์ดซ้าย: รายการที่ได้รับ -->
       <div class="md:col-span-7 card-surface rounded-2xl p-5 min-h-[380px] flex flex-col">
         <div class="flex items-start justify-between gap-3">
           <div class="flex items-center gap-3">
@@ -505,7 +481,6 @@
           </div>
         </div>
 
-        <!-- รายการไฟล์และข้อความที่ได้รับ -->
         <div id="receivedItemsContainer" class="flex-1 flex flex-col mt-4">
           <div id="receivedEmptyState" class="flex-1 flex flex-col items-center justify-center text-center py-12 px-4">
             <p class="text-xs font-medium text-sec">รายการที่ได้รับจะขึ้นที่นี่</p>
@@ -517,9 +492,7 @@
         </div>
       </div>
 
-      <!-- การ์ดขวา: สแกนจากมือถือ หรือ สถานะเชื่อมต่ออยู่ -->
       <div class="md:col-span-5">
-        <!-- สถานะยังไม่เชื่อมต่อ: แสดง QR Code และรหัส 6 หลัก -->
         <div id="qrReceiveCard" class="card-surface rounded-2xl p-5">
           <h3 class="text-xs font-medium text-dim">สแกนจากมือถือ</h3>
 
@@ -551,7 +524,6 @@
           </div>
         </div>
 
-        <!-- สถานะเชื่อมต่ออยู่ -->
         <div id="connectedReceiveCard" class="hidden card-surface rounded-2xl p-5">
           <div class="text-xs text-dim">เชื่อมต่ออยู่</div>
           <div class="flex items-center gap-2 mt-1.5">
@@ -575,15 +547,10 @@
 
     </div>
 
-    <!-- ========================================== -->
-    <!-- VIEW 2: แท็บ "ส่งไฟล์" -->
-    <!-- ========================================== -->
     <div id="sendView" class="hidden grid-cols-1 md:grid-cols-12 gap-5 flex-1 items-start">
 
-      <!-- แถบสถานะและกล่องส่งไฟล์ -->
       <div class="md:col-span-5 md:order-2 space-y-4">
 
-        <!-- แถบหัวข้อเมื่อเชื่อมต่อแล้ว -->
         <div id="sendConnectedHeader" class="hidden flex items-center justify-between text-xs px-1">
           <div class="text-dim truncate pr-2">
             ส่งไปที่ <span id="sendConnectedPeerName" class="text-main font-semibold">Device</span>
@@ -599,21 +566,18 @@
           </div>
         </div>
 
-        <!-- Step 1: เลือกเครื่องที่จะส่งไป -->
         <div id="step1SelectDeviceCard" class="card-surface rounded-2xl p-5">
           <div class="flex items-center gap-2.5">
             <span class="w-5 h-5 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center shrink-0">1</span>
             <h3 class="text-sm font-semibold text-main">เลือกเครื่องที่จะส่งไป</h3>
           </div>
 
-          <!-- เครื่องที่เจอใน Wi-Fi เดียวกัน -->
           <div id="nearbyDevicesContainer" class="hidden mt-3 space-y-2"></div>
 
           <p class="text-xs text-dim mt-3 leading-relaxed">
             ใส่รหัส 6 ตัวที่แสดงบนเครื่องนั้น หรือสแกน QR ด้วยกล้องมือถือ
           </p>
 
-          <!-- ช่องกรอกรหัส 6 ช่องแยกอิสระ -->
           <div id="codeBoxesWrapper" class="grid grid-cols-6 gap-2 mt-3.5">
             <input type="text" maxlength="1" autocapitalize="characters" autocomplete="off" data-idx="0"
               class="code-box sub-surface h-12 rounded-xl text-center text-lg font-bold text-main uppercase" />
@@ -634,14 +598,12 @@
           </p>
         </div>
 
-        <!-- Step 2: เลือกไฟล์หรือพิมพ์ข้อความ -->
         <div id="step2TransferCard" class="space-y-4 opacity-50 pointer-events-none transition-opacity">
           <div id="step2HeaderLabel" class="flex items-center gap-2.5 px-1">
             <span class="w-5 h-5 rounded-full bg-slate-500 text-white text-xs font-bold flex items-center justify-center shrink-0">2</span>
             <h3 class="text-sm font-medium text-dim">เลือกไฟล์หรือพิมพ์ข้อความ</h3>
           </div>
 
-          <!-- กล่องเลือกไฟล์เส้นประ -->
           <div id="dropZone" onclick="document.getElementById('fileInput').click()"
             class="card-surface dropzone-area border-2 border-dashed rounded-2xl p-7 text-center cursor-pointer transition">
             <input type="file" id="fileInput" multiple class="hidden" onchange="handleFiles(this.files)" />
@@ -652,7 +614,6 @@
             <p class="text-xs text-dim mt-1">รูป วิดีโอ หรือไฟล์อะไรก็ได้ · เลือกได้หลายไฟล์</p>
           </div>
 
-          <!-- กล่องพิมพ์ข้อความและวางจากคลิปบอร์ด -->
           <div class="card-surface rounded-2xl p-4">
             <textarea id="textMessageInput" rows="3" placeholder="พิมพ์หรือวางข้อความ ลิงก์ โค้ด... ปลายทางคัดลอกให้เลย"
               onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendTextMessage(); }"
@@ -672,7 +633,6 @@
 
       </div>
 
-      <!-- การ์ดรายการที่ส่ง -->
       <div class="md:col-span-7 md:order-1 card-surface rounded-2xl p-5 min-h-[220px] md:min-h-[380px] flex flex-col">
         <div class="flex items-start justify-between gap-3">
           <div class="flex items-center gap-3">
@@ -707,7 +667,6 @@
 
   </div>
 
-  <!-- Footer -->
   <footer class="text-center text-[11px] text-dim py-3 px-4">
     © 2026 Natchanon. All Rights Reserved.
   </footer>
@@ -728,12 +687,13 @@
     };
 
     firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
     const db = firebase.database();
 
     // ==========================================
     // 2. ตัวแปรระบบ, ธีม และโลโก้
     // ==========================================
-    const CHUNK_SIZE = 16384; // 16KB ปลอดภัยทั้ง iOS Safari และ Chrome
+    const CHUNK_SIZE = 16384;
     const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const LOGO_LIGHT_URL = 'https://i.postimg.cc/GpWPwRG0/N.png';
     const LOGO_DARK_URL = 'https://i.postimg.cc/VvBWWhJq/N.png';
@@ -741,6 +701,7 @@
     let themePreference = localStorage.getItem('dp_theme') || 'system';
     const systemDarkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 
+    let currentAuthUid = null;
     let peer = null;
     let myPeerId = null;
     let myCode = null;
@@ -1079,8 +1040,24 @@
     }
 
     // ==========================================
-    // 4. เริ่มต้นระบบ PeerJS และ Firebase Signaling
+    // 4. ยืนยันตัวตน Firebase Anonymous Auth + PeerJS
     // ==========================================
+    async function ensureFirebaseAuth() {
+      if (auth.currentUser) {
+        currentAuthUid = auth.currentUser.uid;
+        return currentAuthUid;
+      }
+      try {
+        const cred = await auth.signInAnonymously();
+        currentAuthUid = cred.user.uid;
+        return currentAuthUid;
+      } catch (err) {
+        console.error('Firebase Auth Error:', err);
+        showToast('กรุณาเปิด Anonymous Sign-in ใน Firebase Authentication', true);
+        return null;
+      }
+    }
+
     async function initApp() {
       applyTheme();
       document.getElementById('currentHostDisplay').textContent = getShortDisplayUrl();
@@ -1088,6 +1065,8 @@
       syncSettingsUI();
       setupCodeBoxes();
       requestScreenWakeLock();
+
+      await ensureFirebaseAuth();
       initPeerEngine(false);
     }
 
@@ -1163,8 +1142,10 @@
 
     async function syncFirebasePresence(keepExistingCode = false) {
       if (!myPeerId) return;
-      await registerPairingCode(keepExistingCode);
-      await joinWifiRoom();
+      const uid = await ensureFirebaseAuth();
+      if (!uid) return;
+      await registerPairingCode(keepExistingCode, uid);
+      await joinWifiRoom(uid);
     }
 
     function setConnectionStatus(online) {
@@ -1187,7 +1168,8 @@
       return res;
     }
 
-    async function registerPairingCode(keepExistingCode = false) {
+    async function registerPairingCode(keepExistingCode = false, uid = currentAuthUid) {
+      if (!uid) return;
       if (!keepExistingCode || !myCode) {
         if (myCode) {
           await db.ref(`codes/${myCode}`).remove().catch(() => {});
@@ -1203,6 +1185,7 @@
       await codeRef.set({
         peerId: myPeerId,
         deviceName: myDeviceName,
+        ownerUid: uid,
         timestamp: firebase.database.ServerValue.TIMESTAMP
       });
       codeRef.onDisconnect().remove();
@@ -1232,7 +1215,7 @@
 
     function regenerateCode() {
       if (myPeerId) {
-        registerPairingCode(false);
+        registerPairingCode(false, currentAuthUid);
         showToast('เปลี่ยนรหัสรับไฟล์ใหม่แล้ว');
       }
     }
@@ -1244,7 +1227,8 @@
       showToast('คัดลอกลิงก์แล้ว');
     }
 
-    async function joinWifiRoom() {
+    async function joinWifiRoom(uid = currentAuthUid) {
+      if (!uid) return;
       try {
         if (!wifiRoomKey) {
           const res = await fetch('https://api.ipify.org?format=json');
@@ -1255,7 +1239,8 @@
         const myRoomRef = db.ref(`wifi_rooms/${wifiRoomKey}/${myPeerId}`);
         await myRoomRef.set({
           peerId: myPeerId,
-          deviceName: myDeviceName
+          deviceName: myDeviceName,
+          ownerUid: uid
         });
         myRoomRef.onDisconnect().remove();
 
@@ -1352,6 +1337,7 @@
       }
 
       try {
+        await ensureFirebaseAuth();
         const snap = await db.ref(`codes/${code}`).once('value');
         const target = snap.val();
         if (!target) {
@@ -1360,7 +1346,7 @@
         }
         initiateConnection(target.peerId, target.deviceName, true, false, code);
       } catch (err) {
-        showToast('ไม่สามารถอ่านข้อมูลจาก Firebase ได้ กรุณาเช็ก Rules', true);
+        showToast('ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาเช็ก Firebase Rules', true);
       }
     }
 
@@ -1627,7 +1613,7 @@
     }
 
     // ==========================================
-    // 7. การส่งและรับไฟล์ (ตรวจจับ Header จริง + Thumbnail + Base64)
+    // 7. การส่งและรับไฟล์ + ข้อความ
     // ==========================================
     function resolveMimeType(filename, rawMime) {
       if (rawMime && rawMime !== 'application/octet-stream') return rawMime;
@@ -1643,7 +1629,6 @@
       return map[ext] || rawMime || 'application/octet-stream';
     }
 
-    // ตรวจสอบหัวไฟล์ไบต์จริง (Magic Bytes) ป้องกันปัญหา iPhone ตั้งชื่อไฟล์ HEIC เป็น .jpeg
     function detectRealMimeFromBytes(firstChunk, fallbackMime) {
       if (!firstChunk || firstChunk.length < 12) return fallbackMime;
       if (firstChunk[0] === 0xFF && firstChunk[1] === 0xD8 && firstChunk[2] === 0xFF) {
@@ -1668,7 +1653,6 @@
       return fallbackMime;
     }
 
-    // สร้างภาพตัวอย่างย่อ (Thumbnail Data URL) จากฝั่งเครื่องส่งโดยตรง
     function buildImageThumbnailDataUrl(file) {
       return new Promise((resolve) => {
         const isImg = (file.type && file.type.startsWith('image/')) ||
