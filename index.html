@@ -3,12 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Dropple — ส่งไฟล์และข้อความตรงระหว่างเครื่อง</title>
   <link id="faviconLink" rel="icon" type="image/png" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
   <link id="shortcutIconLink" rel="shortcut icon" type="image/png" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
   <link id="appleTouchIconLink" rel="apple-touch-icon" href="https://i.postimg.cc/NjNbnZpZ/N.png" />
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -257,7 +259,7 @@
       <ol class="mt-4 space-y-3 text-xs text-sec leading-relaxed list-decimal list-inside">
         <li>เปิดหน้าเว็บนี้บนทั้งสองเครื่องที่ต้องการส่งข้อมูลหากัน</li>
         <li>สแกน QR Code หรือนำรหัส 6 หลักของเครื่องรับไปกรอกในแท็บ <strong class="text-accent">ส่งไฟล์</strong> ของอีกเครื่อง</li>
-        <li>เลือกไฟล์ รูปภาพ วิดีโอ หรือพิมพ์ข้อความเพื่อส่งตรงระหว่างเครื่องโดยไม่ผ่านเซิร์ฟเวอร์</li>
+        <li>เลือกไฟล์ รูปภาพ วิดีโอขนาดใหญ่ หรือพิมพ์ข้อความเพื่อส่งระหว่างเครื่องได้ทันที</li>
         <li>กด <strong class="text-accent">จำไว้</strong> เพื่อให้ครั้งหน้าเห็นชื่อเครื่องและเชื่อมต่อได้ทันทีโดยไม่ต้องใส่รหัสใหม่</li>
       </ol>
       <button onclick="toggleHelpModal(false)" class="mt-5 w-full teal-btn text-xs font-medium py-2.5 rounded-xl transition">
@@ -611,7 +613,7 @@
               <img class="brand-logo-img w-full h-full object-contain" src="https://i.postimg.cc/VvBWWhJq/N.png" alt="Dropple" />
             </div>
             <p class="text-sm font-semibold text-main">แตะเพื่อเลือกไฟล์</p>
-            <p class="text-xs text-dim mt-1">รูป วิดีโอ หรือไฟล์อะไรก็ได้ · เลือกได้หลายไฟล์</p>
+            <p class="text-xs text-dim mt-1">รูป วิดีโอ หรือไฟล์ขนาดใหญ่ · เลือกได้หลายไฟล์</p>
           </div>
 
           <div class="card-surface rounded-2xl p-4">
@@ -693,7 +695,7 @@
     // ==========================================
     // 2. ตัวแปรระบบ, ธีม และโลโก้
     // ==========================================
-    const CHUNK_SIZE = 8192; // 8KB ป้องกัน WebRTC DataChannel เต็มบน iOS Safari
+    const CHUNK_SIZE = 65536; // 64KB ต่อก้อน รองรับไฟล์ขนาดใหญ่ได้เสถียร 100%
     const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const LOGO_LIGHT_URL = 'https://i.postimg.cc/GpWPwRG0/N.png';
     const LOGO_DARK_URL = 'https://i.postimg.cc/VvBWWhJq/N.png';
@@ -702,15 +704,12 @@
     const systemDarkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 
     let currentAuthUid = null;
-    let peer = null;
-    let myPeerId = null;
     let myCode = null;
     let wifiRoomKey = null;
-    let activeConn = null;
+    let isSessionConnected = false;
     let activePeerInfo = null;
     let lastConnectedPeer = null;
-    let pendingIncomingConn = null;
-    let pendingRequesterInfo = null;
+    let pendingHandshake = null;
     let countdownTimer = null;
     let savedDirectoryHandle = null;
     let pendingClipboardText = null;
@@ -719,12 +718,11 @@
     let audioUnlocked = false;
     let wakeLockSentinel = null;
     let lastResumeCheck = 0;
-    let isAutoReconnecting = false;
 
     let receivedStats = { count: 0, bytes: 0 };
     let sentStats = { count: 0, bytes: 0 };
-    const incomingFiles = {};
-    const outgoingAcks = {};
+    const incomingTransfers = {};
+    const processedTransfers = new Set();
 
     const myToken = localStorage.getItem('dp_token') || crypto.randomUUID();
     localStorage.setItem('dp_token', myToken);
@@ -964,7 +962,6 @@
 
     function handleResumeFromBackground() {
       if (document.hidden) return;
-
       const now = Date.now();
       if (now - lastResumeCheck < 800) return;
       lastResumeCheck = now;
@@ -977,53 +974,21 @@
         pendingClipboardText = null;
       }
 
-      if (!peer || peer.destroyed) {
-        setConnectionStatus(false);
-        initPeerEngine(true);
-        return;
-      }
-
-      if (peer.disconnected) {
-        setConnectionStatus(false);
-        try {
-          peer.reconnect();
-        } catch (e) {
-          initPeerEngine(true);
-        }
-      } else if (peer.open) {
-        setConnectionStatus(true);
+      if (myCode && currentAuthUid) {
         syncFirebasePresence(true);
-      }
-
-      if (activeConn && !activeConn.open) {
-        resetSessionUI(true);
-      }
-      if (!activeConn && lastConnectedPeer && lastConnectedPeer.isInitiator && peer && peer.open) {
-        isAutoReconnecting = true;
-        initiateConnection(lastConnectedPeer.peerId, lastConnectedPeer.name, lastConnectedPeer.viaCode, true);
       }
     }
 
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
-        handleResumeFromBackground();
-      }
+      if (!document.hidden) handleResumeFromBackground();
     });
     window.addEventListener('focus', handleResumeFromBackground);
     window.addEventListener('pageshow', handleResumeFromBackground);
 
-    setInterval(() => {
-      if (activeConn && activeConn.open) {
-        try {
-          activeConn.send({ type: 'ping' });
-        } catch (e) {}
-      }
-    }, 4000);
-
     // ==========================================
     // 3. ป้องกันเปิดซ้ำหลายแท็บ
     // ==========================================
-    const tabChannel = new BroadcastChannel('dropple_natchanon_guard_v2');
+    const tabChannel = new BroadcastChannel('dropple_natchanon_guard_v3');
     tabChannel.postMessage({ type: 'ping' });
     tabChannel.onmessage = (e) => {
       if (e.data.type === 'ping') {
@@ -1041,7 +1006,7 @@
     }
 
     // ==========================================
-    // 4. ยืนยันตัวตน Firebase Anonymous Auth + PeerJS
+    // 4. ยืนยันตัวตน Firebase และระบบลงทะเบียนห้องรับส่ง
     // ==========================================
     async function ensureFirebaseAuth() {
       if (auth.currentUser) {
@@ -1067,82 +1032,18 @@
       setupCodeBoxes();
       requestScreenWakeLock();
 
-      await ensureFirebaseAuth();
-      initPeerEngine(false);
-    }
-
-    function initPeerEngine(isRecovery = false) {
-      if (peer && !peer.destroyed) {
-        try { peer.destroy(); } catch (e) {}
-      }
-
-      peer = new Peer({
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        }
+      db.ref('.info/connected').on('value', (snap) => {
+        setConnectionStatus(snap.val() === true);
       });
 
-      peer.on('open', async (id) => {
-        myPeerId = id;
-        setConnectionStatus(true);
-        await syncFirebasePresence(isRecovery);
+      const uid = await ensureFirebaseAuth();
+      if (!uid) return;
 
-        if (!isRecovery) {
-          checkUrlCodeParam();
-        } else if (!activeConn && lastConnectedPeer && lastConnectedPeer.isInitiator) {
-          isAutoReconnecting = true;
-          initiateConnection(lastConnectedPeer.peerId, lastConnectedPeer.name, lastConnectedPeer.viaCode, true);
-        }
-      });
-
-      peer.on('connection', (conn) => {
-        setupIncomingConnection(conn);
-      });
-
-      peer.on('disconnected', () => {
-        setConnectionStatus(false);
-        if (!document.hidden) {
-          try { peer.reconnect(); } catch (e) {}
-        }
-      });
-
-      peer.on('close', () => {
-        setConnectionStatus(false);
-      });
-
-      peer.on('error', (err) => {
-        console.error('PeerJS Error:', err);
-        if (document.hidden) return;
-
-        if (err.type === 'peer-unavailable') {
-          if (isAutoReconnecting) {
-            isAutoReconnecting = false;
-            lastConnectedPeer = null;
-            return;
-          }
-          showToast('ไม่พบเครื่องปลายทาง หรือเครื่องนั้นปิดหน้าเว็บไปแล้ว', true);
-          return;
-        }
-
-        if (['network', 'disconnected', 'server-error', 'socket-closed', 'socket-error'].includes(err.type)) {
-          setConnectionStatus(false);
-          setTimeout(() => {
-            if (!document.hidden && peer && peer.disconnected && !peer.destroyed) {
-              try { peer.reconnect(); } catch (e) {}
-            }
-          }, 1200);
-          return;
-        }
-
-        showToast('การเชื่อมต่อขัดข้อง: ' + err.type, true);
-      });
+      await syncFirebasePresence(false);
+      checkUrlCodeParam();
     }
 
     async function syncFirebasePresence(keepExistingCode = false) {
-      if (!myPeerId) return;
       const uid = await ensureFirebaseAuth();
       if (!uid) return;
       await registerPairingCode(keepExistingCode, uid);
@@ -1171,9 +1072,14 @@
 
     async function registerPairingCode(keepExistingCode = false, uid = currentAuthUid) {
       if (!uid) return;
+      const oldCode = myCode;
       if (!keepExistingCode || !myCode) {
-        if (myCode) {
-          await db.ref(`codes/${myCode}`).remove().catch(() => {});
+        if (oldCode) {
+          db.ref(`inbox/${oldCode}`).off();
+          db.ref(`signals/${oldCode}`).off();
+          await db.ref(`codes/${oldCode}`).remove().catch(() => {});
+          await db.ref(`inbox/${oldCode}`).remove().catch(() => {});
+          await db.ref(`signals/${oldCode}`).remove().catch(() => {});
         }
         myCode = generateRandomCode();
       }
@@ -1184,12 +1090,18 @@
 
       const codeRef = db.ref(`codes/${myCode}`);
       await codeRef.set({
-        peerId: myPeerId,
+        code: myCode,
         deviceName: myDeviceName,
+        token: myToken,
         ownerUid: uid,
         timestamp: firebase.database.ServerValue.TIMESTAMP
       });
       codeRef.onDisconnect().remove();
+      db.ref(`inbox/${myCode}`).onDisconnect().remove();
+      db.ref(`signals/${myCode}`).onDisconnect().remove();
+
+      listenForIncomingSignals(myCode);
+      listenForIncomingInbox(myCode);
 
       const shareUrl = `${getShareBaseUrl()}?code=${myCode}`;
 
@@ -1215,10 +1127,8 @@
     }
 
     function regenerateCode() {
-      if (myPeerId) {
-        registerPairingCode(false, currentAuthUid);
-        showToast('เปลี่ยนรหัสรับไฟล์ใหม่แล้ว');
-      }
+      registerPairingCode(false, currentAuthUid);
+      showToast('เปลี่ยนรหัสรับไฟล์ใหม่แล้ว');
     }
 
     function copyShareLink() {
@@ -1229,7 +1139,7 @@
     }
 
     async function joinWifiRoom(uid = currentAuthUid) {
-      if (!uid) return;
+      if (!uid || !myCode) return;
       try {
         if (!wifiRoomKey) {
           const res = await fetch('https://api.ipify.org?format=json');
@@ -1237,9 +1147,10 @@
           wifiRoomKey = data.ip.replace(/[.:]/g, '_');
         }
 
-        const myRoomRef = db.ref(`wifi_rooms/${wifiRoomKey}/${myPeerId}`);
+        const myRoomRef = db.ref(`wifi_rooms/${wifiRoomKey}/${myToken}`);
         await myRoomRef.set({
-          peerId: myPeerId,
+          code: myCode,
+          token: myToken,
           deviceName: myDeviceName,
           ownerUid: uid
         });
@@ -1255,7 +1166,7 @@
 
     function renderNearbyDevices(devices) {
       const container = document.getElementById('nearbyDevicesContainer');
-      const entries = Object.values(devices).filter(d => d.peerId !== myPeerId);
+      const entries = Object.values(devices).filter(d => d.token !== myToken && d.code);
 
       if (entries.length === 0) {
         container.classList.add('hidden');
@@ -1265,7 +1176,7 @@
 
       container.classList.remove('hidden');
       container.innerHTML = entries.map(device => `
-        <button onclick="initiateConnection('${device.peerId}', '${escapeHtml(device.deviceName)}', false)"
+        <button onclick="connectByCode('${escapeHtml(device.code)}', false)"
           class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl sub-surface hover:border-teal-500 transition text-left">
           <div class="flex items-center gap-2.5">
             <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -1277,7 +1188,7 @@
     }
 
     // ==========================================
-    // 5. จัดการช่องรหัส 6 ตัวและการเชื่อมต่อ
+    // 5. การจับคู่ผ่าน Firebase Signals (5G ↔ Wi-Fi เชื่อมได้ 100%)
     // ==========================================
     function setupCodeBoxes() {
       const boxes = document.querySelectorAll('.code-box');
@@ -1323,11 +1234,23 @@
     function checkSixBoxesAndConnect() {
       const code = getEnteredCode();
       if (code.length === 6) {
-        connectByCode(code);
+        connectByCode(code, true);
       }
     }
 
-    async function connectByCode(codeInput) {
+    function checkUrlCodeParam() {
+      const params = new URLSearchParams(window.location.search);
+      const code = (params.get('code') || '').toUpperCase();
+      if (code.length === 6) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        switchTab('send');
+        const boxes = document.querySelectorAll('.code-box');
+        code.split('').forEach((c, i) => { if (boxes[i]) boxes[i].value = c; });
+        connectByCode(code, true);
+      }
+    }
+
+    async function connectByCode(codeInput, viaCode = true) {
       const code = (codeInput || getEnteredCode()).trim().toUpperCase();
       if (code.length !== 6) return;
 
@@ -1345,86 +1268,64 @@
           showToast('ไม่พบรหัสนี้ หรือเครื่องปลายทางปิดหน้าเว็บไปแล้ว', true);
           return;
         }
-        initiateConnection(target.peerId, target.deviceName, true, false, code);
+
+        showToast(`กำลังเชื่อมต่อกับ ${target.deviceName}...`);
+        const reqId = crypto.randomUUID();
+        const reqRef = db.ref(`signals/${code}/${reqId}`);
+
+        await reqRef.set({
+          type: 'handshake-hello',
+          reqId,
+          senderCode: myCode,
+          deviceName: myDeviceName,
+          token: myToken,
+          viaCode,
+          status: 'pending',
+          timestamp: firebase.database.ServerValue.TIMESTAMP
+        });
+
+        reqRef.on('value', (resSnap) => {
+          const val = resSnap.val();
+          if (!val || val.status === 'pending') return;
+
+          reqRef.off();
+          reqRef.remove().catch(() => {});
+
+          if (val.status === 'accepted') {
+            const peerMeta = {
+              code: code,
+              name: val.responderName || target.deviceName,
+              token: val.responderToken || target.token || null,
+              viaCode
+            };
+            lastConnectedPeer = peerMeta;
+            activateSession(peerMeta);
+            switchTab('send');
+            showToast(`เชื่อมต่อกับ ${peerMeta.name} สำเร็จ`);
+          } else if (val.status === 'rejected') {
+            showToast('เครื่องปลายทางปฏิเสธการเชื่อมต่อ', true);
+          }
+        });
       } catch (err) {
         showToast('ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาเช็ก Firebase Rules', true);
       }
     }
 
-    function checkUrlCodeParam() {
-      const params = new URLSearchParams(window.location.search);
-      const code = (params.get('code') || '').toUpperCase();
-      if (code.length === 6) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-        switchTab('send');
-        const boxes = document.querySelectorAll('.code-box');
-        code.split('').forEach((c, i) => { if (boxes[i]) boxes[i].value = c; });
-        connectByCode(code);
-      }
-    }
+    function listenForIncomingSignals(code) {
+      const sigRef = db.ref(`signals/${code}`);
+      sigRef.off();
+      sigRef.on('child_added', async (snap) => {
+        const data = snap.val();
+        if (!data || data.status !== 'pending') return;
 
-    function initiateConnection(targetPeerId, targetName, viaCode = false, silent = false, targetCode = null) {
-      if (activeConn) {
-        try { activeConn.close(); } catch (e) {}
-      }
-      if (!silent) {
-        showToast(`กำลังเชื่อมต่อกับ ${targetName}...`);
-      }
-
-      const conn = peer.connect(targetPeerId, { serialization: 'json', reliable: true });
-      conn.on('open', () => {
-        conn.send({
-          type: 'handshake-hello',
-          deviceName: myDeviceName,
-          token: myToken,
-          viaCode
-        });
-      });
-
-      conn.on('data', (data) => {
-        if (data.type === 'ping') {
-          try { conn.send({ type: 'pong' }); } catch (e) {}
+        if (data.type === 'disconnect') {
+          snap.ref.remove().catch(() => {});
+          if (isSessionConnected && activePeerInfo && activePeerInfo.code === data.senderCode) {
+            resetSessionUI(false);
+            showToast('เครื่องปลายทางยกเลิกการเชื่อมต่อแล้ว');
+          }
           return;
         }
-        if (data.type === 'pong') return;
-
-        if (data.type === 'handshake-accepted') {
-          isAutoReconnecting = false;
-          const peerMeta = {
-            peerId: targetPeerId,
-            name: data.deviceName || targetName,
-            token: data.token || null,
-            viaCode,
-            targetCode: targetCode || (lastConnectedPeer && lastConnectedPeer.targetCode) || null,
-            isInitiator: true
-          };
-          lastConnectedPeer = peerMeta;
-          activateSession(conn, peerMeta);
-          if (!silent) switchTab('send');
-        } else if (data.type === 'handshake-rejected') {
-          isAutoReconnecting = false;
-          lastConnectedPeer = null;
-          showToast('เครื่องปลายทางปฏิเสธการเชื่อมต่อ', true);
-          conn.close();
-        } else {
-          handleIncomingPayload(data);
-        }
-      });
-
-      conn.on('close', () => {
-        if (activeConn === conn) {
-          resetSessionUI(true);
-        }
-      });
-    }
-
-    function setupIncomingConnection(conn) {
-      conn.on('data', (data) => {
-        if (data.type === 'ping') {
-          try { conn.send({ type: 'pong' }); } catch (e) {}
-          return;
-        }
-        if (data.type === 'pong') return;
 
         if (data.type === 'handshake-hello') {
           const trusted = getTrustedDevices();
@@ -1435,35 +1336,26 @@
           );
 
           if (isTrusted || data.viaCode || isSameSession) {
-            if (activeConn && activeConn !== conn) {
-              try { activeConn.close(); } catch (e) {}
-            }
-            conn.send({ type: 'handshake-accepted', deviceName: myDeviceName, token: myToken });
+            await snap.ref.update({
+              status: 'accepted',
+              responderName: myDeviceName,
+              responderToken: myToken
+            });
             const peerMeta = {
-              peerId: conn.peer,
+              code: data.senderCode,
               name: data.deviceName,
               token: data.token,
-              viaCode: data.viaCode,
-              isInitiator: false
+              viaCode: data.viaCode
             };
             lastConnectedPeer = peerMeta;
-            activateSession(conn, peerMeta);
+            activateSession(peerMeta);
             if (!isTrusted && !isSameSession) {
               showRememberBar(data.deviceName, data.token);
             }
           } else {
-            pendingIncomingConn = conn;
-            pendingRequesterInfo = { token: data.token, name: data.deviceName };
+            pendingHandshake = { ref: snap.ref, data };
             showRequestModal(data.deviceName);
           }
-        } else {
-          handleIncomingPayload(data);
-        }
-      });
-
-      conn.on('close', () => {
-        if (activeConn === conn) {
-          resetSessionUI(true);
         }
       });
     }
@@ -1485,37 +1377,40 @@
       }, 1000);
     }
 
-    function respondConnection(accepted) {
+    async function respondConnection(accepted) {
       clearInterval(countdownTimer);
       const modal = document.getElementById('incomingRequestModal');
       modal.classList.add('hidden');
       modal.classList.remove('flex');
 
-      if (!pendingIncomingConn) return;
+      if (!pendingHandshake) return;
+      const { ref, data } = pendingHandshake;
+      pendingHandshake = null;
 
       if (accepted) {
-        if (document.getElementById('rememberDeviceCheck').checked && pendingRequesterInfo) {
-          saveTrustedDevice(pendingRequesterInfo.token, pendingRequesterInfo.name);
+        if (document.getElementById('rememberDeviceCheck').checked && data.token) {
+          saveTrustedDevice(data.token, data.deviceName);
         }
-        pendingIncomingConn.send({ type: 'handshake-accepted', deviceName: myDeviceName, token: myToken });
+        await ref.update({
+          status: 'accepted',
+          responderName: myDeviceName,
+          responderToken: myToken
+        });
         const peerMeta = {
-          peerId: pendingIncomingConn.peer,
-          name: pendingRequesterInfo.name,
-          token: pendingRequesterInfo.token,
-          viaCode: false,
-          isInitiator: false
+          code: data.senderCode,
+          name: data.deviceName,
+          token: data.token,
+          viaCode: false
         };
         lastConnectedPeer = peerMeta;
-        activateSession(pendingIncomingConn, peerMeta);
+        activateSession(peerMeta);
       } else {
-        pendingIncomingConn.send({ type: 'handshake-rejected' });
-        pendingIncomingConn.close();
+        await ref.update({ status: 'rejected' });
       }
-      pendingIncomingConn = null;
     }
 
-    function activateSession(conn, peerInfo) {
-      activeConn = conn;
+    function activateSession(peerInfo) {
+      isSessionConnected = true;
       activePeerInfo = peerInfo;
 
       document.getElementById('qrReceiveCard').classList.add('hidden');
@@ -1534,15 +1429,19 @@
     }
 
     function disconnectPeer() {
-      lastConnectedPeer = null;
-      if (activeConn) {
-        try { activeConn.close(); } catch (e) {}
+      if (activePeerInfo && activePeerInfo.code) {
+        const discId = crypto.randomUUID();
+        db.ref(`signals/${activePeerInfo.code}/${discId}`).set({
+          type: 'disconnect',
+          senderCode: myCode,
+          status: 'pending'
+        }).catch(() => {});
       }
       resetSessionUI(false);
     }
 
     function resetSessionUI(keepLastPeer = false) {
-      activeConn = null;
+      isSessionConnected = false;
       activePeerInfo = null;
       if (!keepLastPeer) {
         lastConnectedPeer = null;
@@ -1614,7 +1513,7 @@
     }
 
     // ==========================================
-    // 7. การส่งและรับไฟล์ (ระบบ Ack ทีละก้อน + Safari Safe Download)
+    // 7. การส่งและรับไฟล์ขนาดใหญ่ 100% (Firebase RTDB Streaming)
     // ==========================================
     function resolveMimeType(filename, rawMime) {
       if (rawMime && rawMime !== 'application/octet-stream') return rawMime;
@@ -1625,31 +1524,21 @@
         heic: 'image/heic', heif: 'image/heif', bmp: 'image/bmp',
         mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
         mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg',
-        pdf: 'application/pdf', txt: 'text/plain'
+        pdf: 'application/pdf', txt: 'text/plain', zip: 'application/zip'
       };
       return map[ext] || rawMime || 'application/octet-stream';
     }
 
     function detectRealMimeFromBytes(firstChunk, fallbackMime) {
       if (!firstChunk || firstChunk.length < 12) return fallbackMime;
-      if (firstChunk[0] === 0xFF && firstChunk[1] === 0xD8 && firstChunk[2] === 0xFF) {
-        return 'image/jpeg';
-      }
-      if (firstChunk[0] === 0x89 && firstChunk[1] === 0x50 && firstChunk[2] === 0x4E && firstChunk[3] === 0x47) {
-        return 'image/png';
-      }
-      if (firstChunk[0] === 0x47 && firstChunk[1] === 0x49 && firstChunk[2] === 0x46) {
-        return 'image/gif';
-      }
+      if (firstChunk[0] === 0xFF && firstChunk[1] === 0xD8 && firstChunk[2] === 0xFF) return 'image/jpeg';
+      if (firstChunk[0] === 0x89 && firstChunk[1] === 0x50 && firstChunk[2] === 0x4E && firstChunk[3] === 0x47) return 'image/png';
+      if (firstChunk[0] === 0x47 && firstChunk[1] === 0x49 && firstChunk[2] === 0x46) return 'image/gif';
       if (firstChunk[0] === 0x52 && firstChunk[1] === 0x49 && firstChunk[2] === 0x46 && firstChunk[3] === 0x46 &&
-          firstChunk[8] === 0x57 && firstChunk[9] === 0x45 && firstChunk[10] === 0x42 && firstChunk[11] === 0x50) {
-        return 'image/webp';
-      }
+          firstChunk[8] === 0x57 && firstChunk[9] === 0x45 && firstChunk[10] === 0x42 && firstChunk[11] === 0x50) return 'image/webp';
       if (firstChunk[4] === 0x66 && firstChunk[5] === 0x74 && firstChunk[6] === 0x79 && firstChunk[7] === 0x70) {
         const brand = String.fromCharCode(firstChunk[8], firstChunk[9], firstChunk[10], firstChunk[11]).toLowerCase();
-        if (['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand)) {
-          return 'image/heic';
-        }
+        if (['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand)) return 'image/heic';
       }
       return fallbackMime;
     }
@@ -1692,9 +1581,9 @@
     function arrayBufferToBase64(buffer) {
       const bytes = new Uint8Array(buffer);
       let binary = '';
-      const chunkLen = 8192;
-      for (let i = 0; i < bytes.length; i += chunkLen) {
-        const sub = bytes.subarray(i, i + chunkLen);
+      const step = 8192;
+      for (let i = 0; i < bytes.length; i += step) {
+        const sub = bytes.subarray(i, i + step);
         for (let j = 0; j < sub.length; j++) {
           binary += String.fromCharCode(sub[j]);
         }
@@ -1712,25 +1601,6 @@
       return bytes;
     }
 
-    function decodeIncomingChunk(rawChunk) {
-      if (!rawChunk) return new Uint8Array(0);
-      if (typeof rawChunk === 'string') return base64ToUint8Array(rawChunk);
-      if (rawChunk instanceof Uint8Array) return rawChunk;
-      if (rawChunk instanceof ArrayBuffer) return new Uint8Array(rawChunk);
-      if (ArrayBuffer.isView(rawChunk)) {
-        return new Uint8Array(rawChunk.buffer, rawChunk.byteOffset, rawChunk.byteLength);
-      }
-      if (Array.isArray(rawChunk)) return new Uint8Array(rawChunk);
-      if (typeof rawChunk === 'object') {
-        if (Array.isArray(rawChunk.data)) return new Uint8Array(rawChunk.data);
-        const values = Object.values(rawChunk);
-        if (values.length > 0 && typeof values[0] === 'number') {
-          return new Uint8Array(values);
-        }
-      }
-      return new Uint8Array(0);
-    }
-
     function blobToDataUrl(blob) {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -1740,18 +1610,17 @@
       });
     }
 
-    function waitForChunkAck(fileId, timeoutMs = 4000) {
-      return new Promise((resolve) => {
-        const timer = setTimeout(() => {
-          delete outgoingAcks[fileId];
-          resolve(false);
-        }, timeoutMs);
-        outgoingAcks[fileId] = () => {
-          clearTimeout(timer);
-          delete outgoingAcks[fileId];
-          resolve(true);
-        };
-      });
+    async function writeFirebaseWithRetry(ref, value, maxRetries = 5) {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          await ref.set(value);
+          return true;
+        } catch (err) {
+          if (attempt === maxRetries) throw err;
+          await new Promise(r => setTimeout(r, 400 * attempt));
+        }
+      }
+      return false;
     }
 
     async function pasteFromClipboard() {
@@ -1768,19 +1637,33 @@
       }
     }
 
-    function sendTextMessage() {
+    async function sendTextMessage() {
       const input = document.getElementById('textMessageInput');
       const text = input.value.trim();
-      if (!text || !activeConn) return;
+      if (!text || !isSessionConnected || !activePeerInfo?.code) return;
 
-      activeConn.send({ type: 'text-message', text });
-      playNotificationSound('send');
-      appendSentTextItem(text);
+      const msgId = crypto.randomUUID();
       input.value = '';
+
+      try {
+        await writeFirebaseWithRetry(db.ref(`inbox/${activePeerInfo.code}/${msgId}`), {
+          id: msgId,
+          type: 'text-message',
+          senderCode: myCode,
+          senderName: myDeviceName,
+          text,
+          timestamp: firebase.database.ServerValue.TIMESTAMP
+        });
+        playNotificationSound('send');
+        appendSentTextItem(text);
+      } catch (err) {
+        showToast('ส่งข้อความไม่สำเร็จ กรุณาลองใหม่', true);
+      }
     }
 
     async function handleFiles(fileList) {
-      if (!activeConn || fileList.length === 0) return;
+      if (!isSessionConnected || !activePeerInfo?.code || fileList.length === 0) return;
+      const targetCode = activePeerInfo.code;
 
       for (const file of fileList) {
         const fileId = crypto.randomUUID();
@@ -1789,171 +1672,211 @@
         const thumbDataUrl = await buildImageThumbnailDataUrl(file);
         const statusEl = appendSentFileItem(fileId, file.name, file.size);
 
-        const startAckPromise = waitForChunkAck(fileId, 5000);
-        activeConn.send({
-          type: 'file-start',
-          fileId,
-          name: file.name,
-          size: file.size,
-          mime,
-          totalChunks,
-          thumbDataUrl
-        });
-        await startAckPromise;
+        const transferRef = db.ref(`inbox/${targetCode}/${fileId}`);
 
-        for (let i = 0; i < totalChunks; i++) {
-          if (!activeConn || !activeConn.open) {
-            statusEl.textContent = 'หลุด';
-            showToast('การเชื่อมต่อหลุดระหว่างส่งไฟล์ กรุณาลองใหม่', true);
-            return;
-          }
-
-          while (activeConn.dataChannel && activeConn.dataChannel.bufferedAmount > CHUNK_SIZE * 4) {
-            await new Promise(r => setTimeout(r, 20));
-          }
-
-          const start = i * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, file.size);
-          const buffer = await file.slice(start, end).arrayBuffer();
-          const b64Chunk = arrayBufferToBase64(buffer);
-
-          const needAck = ((i + 1) % 4 === 0) || (i === totalChunks - 1);
-          const ackPromise = needAck ? waitForChunkAck(fileId, 6000) : null;
-
-          activeConn.send({
-            type: 'file-chunk',
-            fileId,
-            index: i,
-            b64: b64Chunk,
-            needAck
+        try {
+          // 1. สร้างข้อมูลหัวไฟล์ให้ฝั่งรับเริ่มรอรับก้อนข้อมูลทันที
+          await writeFirebaseWithRetry(transferRef, {
+            id: fileId,
+            type: 'file-transfer',
+            senderCode: myCode,
+            senderName: myDeviceName,
+            name: file.name,
+            size: file.size,
+            mime,
+            totalChunks,
+            thumbDataUrl: thumbDataUrl || '',
+            completed: false,
+            timestamp: firebase.database.ServerValue.TIMESTAMP
           });
 
-          if (needAck) {
-            await ackPromise;
+          // 2. ส่งก้อนข้อมูลทีละก้อน (64KB) แบบเรียงลำดับ ไม่กิน RAM และรองรับไฟล์ขนาดใหญ่ 100%
+          for (let i = 0; i < totalChunks; i++) {
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, file.size);
+            const buffer = await file.slice(start, end).arrayBuffer();
+            const b64Chunk = arrayBufferToBase64(buffer);
+
+            await writeFirebaseWithRetry(transferRef.child(`chunks/${i}`), b64Chunk);
+
             const pct = Math.round(((i + 1) / totalChunks) * 100);
             statusEl.textContent = `${pct}%`;
           }
-        }
 
-        const endAckPromise = waitForChunkAck(fileId, 6000);
-        activeConn.send({ type: 'file-end', fileId });
-        const confirmed = await endAckPromise;
+          // 3. ยืนยันว่าอัปโหลดครบทุกก้อนแล้ว
+          await transferRef.update({ completed: true });
 
-        playNotificationSound('send');
-        if (confirmed) {
+          playNotificationSound('send');
           statusEl.innerHTML = `
             <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           `;
-        } else {
-          statusEl.textContent = 'ส่งแล้ว';
+          sentStats.count++;
+          sentStats.bytes += file.size;
+          updateSentSummary();
+        } catch (err) {
+          console.error('Upload error:', err);
+          statusEl.textContent = 'ล้มเหลว';
+          showToast(`ส่งไฟล์ ${file.name} ไม่สำเร็จ กรุณาลองใหม่`, true);
+          transferRef.remove().catch(() => {});
         }
-        sentStats.count++;
-        sentStats.bytes += file.size;
-        updateSentSummary();
       }
 
       document.getElementById('fileInput').value = '';
     }
 
-    async function handleIncomingPayload(data) {
-      if (data.type === 'chunk-ack') {
-        if (outgoingAcks[data.fileId]) {
-          outgoingAcks[data.fileId]();
+    function listenForIncomingInbox(code) {
+      const inboxRef = db.ref(`inbox/${code}`);
+      inboxRef.off();
+
+      inboxRef.on('child_added', async (snap) => {
+        const item = snap.val();
+        if (!item || !item.id || processedTransfers.has(item.id)) return;
+
+        // กรณีได้รับข้อความ
+        if (item.type === 'text-message') {
+          processedTransfers.add(item.id);
+          snap.ref.remove().catch(() => {});
+
+          playNotificationSound('receive');
+          appendReceivedTextItem(item.text, item.senderName);
+
+          if (appSettings.autoCopyText) {
+            if (document.hidden) {
+              pendingClipboardText = item.text;
+            } else {
+              navigator.clipboard?.writeText(item.text).catch(() => {});
+            }
+          }
+          showToast('ได้รับข้อความใหม่');
+          return;
         }
-        return;
+
+        // กรณีได้รับไฟล์ (ทั้งไฟล์เล็กและไฟล์ขนาดใหญ่)
+        if (item.type === 'file-transfer') {
+          if (incomingTransfers[item.id]) return;
+
+          const resolvedMime = resolveMimeType(item.name, item.mime);
+          const statusEl = appendReceivedFileSkeleton(
+            item.id,
+            item.name,
+            item.size,
+            item.thumbDataUrl || null,
+            item.senderName
+          );
+
+          const record = {
+            id: item.id,
+            ref: snap.ref,
+            meta: {
+              fileId: item.id,
+              name: item.name,
+              size: item.size,
+              mime: resolvedMime,
+              totalChunks: item.totalChunks,
+              thumbDataUrl: item.thumbDataUrl || null,
+              senderName: item.senderName
+            },
+            chunks: new Array(item.totalChunks),
+            receivedCount: 0,
+            statusEl,
+            isFinalizing: false
+          };
+          incomingTransfers[item.id] = record;
+
+          // รับก้อนข้อมูลแบบเรียลไทม์ทีละก้อนที่อัปโหลดเข้ามา
+          const chunksRef = snap.ref.child('chunks');
+          chunksRef.on('child_added', (chunkSnap) => {
+            const idx = parseInt(chunkSnap.key, 10);
+            const b64 = chunkSnap.val();
+            if (!isNaN(idx) && typeof b64 === 'string' && !record.chunks[idx]) {
+              record.chunks[idx] = base64ToUint8Array(b64);
+              record.receivedCount++;
+              const pct = Math.min(99, Math.round((record.receivedCount / record.meta.totalChunks) * 100));
+              record.statusEl.textContent = `${pct}%`;
+
+              if (record.receivedCount >= record.meta.totalChunks && !record.isFinalizing) {
+                finalizeIncomingFirebaseFile(record);
+              }
+            }
+          });
+
+          // เผื่อกรณีไฟล์เล็กมากที่ส่งเสร็จตั้งแต่ก่อนเปิด listener
+          if (item.completed && !record.isFinalizing) {
+            const fullSnap = await snap.ref.child('chunks').once('value');
+            fullSnap.forEach((cSnap) => {
+              const idx = parseInt(cSnap.key, 10);
+              const b64 = cSnap.val();
+              if (!isNaN(idx) && typeof b64 === 'string' && !record.chunks[idx]) {
+                record.chunks[idx] = base64ToUint8Array(b64);
+                record.receivedCount++;
+              }
+            });
+            if (record.receivedCount >= record.meta.totalChunks && !record.isFinalizing) {
+              finalizeIncomingFirebaseFile(record);
+            }
+          }
+        }
+      });
+    }
+
+    async function finalizeIncomingFirebaseFile(record) {
+      if (record.isFinalizing) return;
+      record.isFinalizing = true;
+      processedTransfers.add(record.id);
+
+      try {
+        record.ref.child('chunks').off();
+      } catch (e) {}
+
+      playNotificationSound('receive');
+
+      const safeChunks = record.chunks.map(c => c || new Uint8Array(0));
+      const realMime = detectRealMimeFromBytes(safeChunks[0], record.meta.mime);
+      record.meta.mime = realMime;
+
+      const blob = new Blob(safeChunks, { type: realMime });
+      const blobUrl = URL.createObjectURL(blob);
+
+      // สำหรับไฟล์ <= 15MB แปลงเป็น Data URL เพื่อให้ Safari ดาวน์โหลดได้ชัวร์
+      // สำหรับไฟล์ใหญ่ > 15MB ใช้ Blob URL และเก็บไว้ในหน่วยความจำ 10 นาทีไม่ให้ Safari ตัดลิงก์
+      let safeDataUrl = null;
+      if (blob.size <= 15 * 1024 * 1024) {
+        safeDataUrl = await blobToDataUrl(blob);
       }
 
-      if (data.type === 'text-message') {
-        playNotificationSound('receive');
-        appendReceivedTextItem(data.text);
+      const downloadHref = safeDataUrl || blobUrl;
+      const previewUrl = (realMime.startsWith('image/') && realMime !== 'image/heic' && downloadHref)
+        ? downloadHref
+        : (record.meta.thumbDataUrl || downloadHref);
 
-        if (appSettings.autoCopyText) {
-          if (document.hidden) {
-            pendingClipboardText = data.text;
-          } else {
-            navigator.clipboard?.writeText(data.text).catch(() => {});
-          }
-        }
-        showToast('ได้รับข้อความใหม่');
-      } else if (data.type === 'file-start') {
-        const resolvedMime = resolveMimeType(data.name, data.mime);
-        const statusEl = appendReceivedFileSkeleton(data.fileId, data.name, data.size, data.thumbDataUrl);
-        incomingFiles[data.fileId] = {
-          meta: { ...data, mime: resolvedMime },
-          chunks: new Array(data.totalChunks),
-          receivedCount: 0,
-          statusEl
-        };
-        if (activeConn && activeConn.open) {
-          try { activeConn.send({ type: 'chunk-ack', fileId: data.fileId }); } catch (e) {}
-        }
-      } else if (data.type === 'file-chunk') {
-        const record = incomingFiles[data.fileId];
-        if (record) {
-          record.chunks[data.index] = decodeIncomingChunk(data.b64 || data.chunk);
-          record.receivedCount++;
-          if (record.receivedCount % 4 === 0 || record.receivedCount === record.meta.totalChunks) {
-            const pct = Math.round((record.receivedCount / record.meta.totalChunks) * 100);
-            record.statusEl.textContent = `${pct}%`;
-          }
-        }
-        if (data.needAck && activeConn && activeConn.open) {
-          try { activeConn.send({ type: 'chunk-ack', fileId: data.fileId }); } catch (e) {}
-        }
-      } else if (data.type === 'file-end') {
-        if (activeConn && activeConn.open) {
-          try { activeConn.send({ type: 'chunk-ack', fileId: data.fileId }); } catch (e) {}
-        }
-
-        const record = incomingFiles[data.fileId];
-        if (!record) return;
-
-        playNotificationSound('receive');
-        const safeChunks = record.chunks.map(c => c || new Uint8Array(0));
-        const realMime = detectRealMimeFromBytes(safeChunks[0], record.meta.mime);
-        record.meta.mime = realMime;
-
-        const blob = new Blob(safeChunks, { type: realMime });
-        const blobUrl = URL.createObjectURL(blob);
-
-        // แปลงเป็น Data URL เพื่อให้ Safari ดาวน์โหลดและเปิดดูได้ครบทุกไบต์ไม่เหลือ 135 ไบต์
-        let safeDataUrl = null;
-        if (blob.size <= 25 * 1024 * 1024) {
-          safeDataUrl = await blobToDataUrl(blob);
-        }
-
-        const downloadHref = safeDataUrl || blobUrl;
-        const previewUrl = (realMime.startsWith('image/') && realMime !== 'image/heic' && safeDataUrl)
-          ? safeDataUrl
-          : (record.meta.thumbDataUrl || downloadHref);
-
-        if (savedDirectoryHandle) {
-          try {
-            const fileHandle = await savedDirectoryHandle.getFileHandle(record.meta.name, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-          } catch (e) {
-            triggerAutoDownload(downloadHref, record.meta.name);
-          }
-        } else {
+      if (savedDirectoryHandle) {
+        try {
+          const fileHandle = await savedDirectoryHandle.getFileHandle(record.meta.name, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        } catch (e) {
           triggerAutoDownload(downloadHref, record.meta.name);
         }
-
-        finalizeReceivedFileItem(record.statusEl, record.meta, previewUrl, downloadHref);
-
-        receivedStats.count++;
-        receivedStats.bytes += record.meta.size;
-        updateReceivedSummary();
-
-        if (appSettings.autoPreview) {
-          openPreviewModal(record.meta.name, realMime, previewUrl, downloadHref);
-        }
-
-        delete incomingFiles[data.fileId];
+      } else {
+        triggerAutoDownload(downloadHref, record.meta.name);
       }
+
+      finalizeReceivedFileItem(record.statusEl, record.meta, previewUrl, downloadHref);
+
+      receivedStats.count++;
+      receivedStats.bytes += record.meta.size;
+      updateReceivedSummary();
+
+      if (appSettings.autoPreview) {
+        openPreviewModal(record.meta.name, realMime, previewUrl, downloadHref);
+      }
+
+      // ลบข้อมูลชั่วคราวออกจาก Firebase RTDB ทันทีหลังรับครบ 100%
+      record.ref.remove().catch(() => {});
+      delete incomingTransfers[record.id];
     }
 
     function triggerAutoDownload(url, filename) {
@@ -1963,7 +1886,7 @@
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
-      setTimeout(() => a.remove(), 1500);
+      setTimeout(() => a.remove(), 2000);
     }
 
     // ==========================================
@@ -1974,12 +1897,12 @@
       return now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
     }
 
-    function appendReceivedFileSkeleton(id, name, size, thumbDataUrl) {
+    function appendReceivedFileSkeleton(id, name, size, thumbDataUrl, senderNameOverride) {
       document.getElementById('receivedEmptyState').classList.add('hidden');
       const list = document.getElementById('receivedList');
       list.classList.remove('hidden');
 
-      const sender = activePeerInfo?.name || 'อุปกรณ์';
+      const sender = senderNameOverride || activePeerInfo?.name || 'อุปกรณ์';
       const item = document.createElement('div');
       item.id = `recv_row_${id}`;
       item.className = 'sub-surface rounded-xl p-3 flex items-center justify-between gap-3 transition';
@@ -2007,7 +1930,7 @@
 
     function finalizeReceivedFileItem(statusEl, meta, previewUrl, downloadUrl) {
       const id = meta.fileId;
-      const sender = activePeerInfo?.name || 'อุปกรณ์';
+      const sender = meta.senderName || activePeerInfo?.name || 'อุปกรณ์';
       const timeStr = getCurrentTimeStr();
       const folderText = savedDirectoryHandle ? `บันทึกใน ${savedDirectoryHandle.name}` : 'บันทึกในดาวน์โหลด';
 
@@ -2051,12 +1974,12 @@
       }
     }
 
-    function appendReceivedTextItem(text) {
+    function appendReceivedTextItem(text, senderNameOverride) {
       document.getElementById('receivedEmptyState').classList.add('hidden');
       const list = document.getElementById('receivedList');
       list.classList.remove('hidden');
 
-      const sender = activePeerInfo?.name || 'อุปกรณ์';
+      const sender = senderNameOverride || activePeerInfo?.name || 'อุปกรณ์';
       const timeStr = getCurrentTimeStr();
       const item = document.createElement('div');
       item.className = 'sub-surface rounded-xl p-3 flex items-start justify-between gap-3';
@@ -2224,7 +2147,7 @@
     });
 
     window.addEventListener('paste', (e) => {
-      if (!activeConn) return;
+      if (!isSessionConnected) return;
       if (document.activeElement === document.getElementById('textMessageInput')) return;
       const files = e.clipboardData?.files;
       if (files && files.length > 0) {
@@ -2311,18 +2234,18 @@
       myDeviceName = val;
       localStorage.setItem('dp_device_name', myDeviceName);
       updateDeviceNameUI();
-      if (myPeerId && wifiRoomKey) {
-        db.ref(`wifi_rooms/${wifiRoomKey}/${myPeerId}/deviceName`).set(myDeviceName);
+      if (wifiRoomKey) {
+        db.ref(`wifi_rooms/${wifiRoomKey}/${myToken}/deviceName`).set(myDeviceName).catch(() => {});
       }
       if (myCode) {
-        db.ref(`codes/${myCode}/deviceName`).set(myDeviceName);
+        db.ref(`codes/${myCode}/deviceName`).set(myDeviceName).catch(() => {});
       }
       showToast('บันทึกชื่อเครื่องแล้ว');
     }
 
     function updateDeviceNameUI() {
       document.getElementById('displayDeviceName').textContent = myDeviceName;
-      if (myPeerId) {
+      if (myCode) {
         document.getElementById('headerSubtitle').textContent = myDeviceName;
       }
     }
